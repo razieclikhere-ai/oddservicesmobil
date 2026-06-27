@@ -24,7 +24,7 @@ dependencies:
   path_provider: ^2.1.3
 
   # OBD-II Connectivity (Bluetooth Classic)
-  flutter_blue_classic: ^0.1.0
+  flutter_blue_classic: 0.1.0
   permission_handler: ^11.3.1
 
   # Network & AI (Groq)
