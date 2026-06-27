@@ -31,6 +31,10 @@ jobs:
     - name: Recreate Platform Projects
       run: flutter create . --org com.smart.obd --project-name smart_obd_assistant
 
+    - name: Patch android/build.gradle for legacy plugins
+      run: |
+        echo -e "\next.flutter = [\n    compileSdkVersion: 34,\n    minSdkVersion: 21,\n    targetSdkVersion: 34\n]" >> android/build.gradle
+
     - name: Get Dependencies
       run: flutter pub get
 
