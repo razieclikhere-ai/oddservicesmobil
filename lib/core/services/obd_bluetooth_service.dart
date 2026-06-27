@@ -183,8 +183,11 @@ class ObdBluetoothService {
     final input = _connection!.input;
     if (input != null) {
       _dataSubscription = input.listen((data) {
-        final chunk = ascii.decode(data);
+        // Use String.fromCharCodes to prevent FormatException from raw/corrupted bytes
+        final chunk = String.fromCharCodes(data);
         _rxBuffer.write(chunk);
+        
+        // ELM327 prompt char '>' indicates it finished processing command(s)
         if (_rxBuffer.toString().contains('>')) {
           final response = _rxBuffer.toString().replaceAll('>', '').trim();
           _parseObdResponse(response);
@@ -196,12 +199,12 @@ class ObdBluetoothService {
       return;
     }
 
-    // 2. Send initialization commands
+    // 2. Send initialization commands (slower intervals to allow cheap OBD clones to boot)
     _sendCmd('ATZ'); // Reset
-    Future.delayed(const Duration(milliseconds: 500), () => _sendCmd('ATE0')); // Echo off
-    Future.delayed(const Duration(milliseconds: 800), () => _sendCmd('ATH0')); // Headers off
-    Future.delayed(const Duration(milliseconds: 1100), () => _sendCmd('ATSP0')); // Auto Protocol
-    Future.delayed(const Duration(milliseconds: 1400), () => _sendCmd('ATRV')); // Read voltage
+    Future.delayed(const Duration(milliseconds: 1000), () => _sendCmd('ATE0')); // Echo off
+    Future.delayed(const Duration(milliseconds: 1800), () => _sendCmd('ATH0')); // Headers off
+    Future.delayed(const Duration(milliseconds: 2600), () => _sendCmd('ATSP0')); // Auto Protocol
+    Future.delayed(const Duration(milliseconds: 3400), () => _sendCmd('ATRV')); // Read voltage
 
     // 3. Setup polling loop every 2 seconds for active sensor readings
     int pollIndex = 0;
@@ -247,50 +250,56 @@ class ObdBluetoothService {
   }
 
   void _parseObdResponse(String raw) {
-    final lines = raw.split('\r').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    final lines = raw.split(RegExp(r'[\r\n]+')).map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
     for (final line in lines) {
-      // Parse battery voltage (e.g. "14.2V")
-      if (line.contains('.') && line.endsWith('V')) {
-        final val = double.tryParse(line.replaceAll('V', ''));
-        if (val != null) batteryVoltage = val;
+      // 1. Parse battery voltage (e.g. "14.2V" or "12.5")
+      if (line.contains('.') && (line.contains('V') || line.endsWith('V') || double.tryParse(line.replaceAll('V', '').trim()) != null)) {
+        final val = double.tryParse(line.replaceAll('V', '').trim());
+        if (val != null) {
+          batteryVoltage = val;
+        }
         continue;
       }
 
-      if (line.length < 4) continue;
-      final responseHeader = line.substring(0, 4).toUpperCase();
-      final bytes = line.substring(4).trim().split(' ');
+      // 2. Strip all spaces for clean hex parsing (supports "41 0C 0F A0" and "410C0FA0")
+      final clean = line.replaceAll(' ', '').toUpperCase();
+      if (clean.length < 4) continue;
 
       try {
-        switch (responseHeader) {
-          case '410C': // RPM = ((A*256) + B) / 4
-            if (bytes.length >= 2) {
-              final a = int.parse(bytes[0], radix: 16);
-              final b = int.parse(bytes[1], radix: 16);
-              rpm = (a * 256 + b) / 4.0;
-            }
-            break;
-          case '410D': // Speed = A km/h
-            if (bytes.isNotEmpty) {
-              speed = int.parse(bytes[0], radix: 16).toDouble();
-            }
-            break;
-          case '4105': // Coolant Temp = A - 40
-            if (bytes.isNotEmpty) {
-              coolantTemp = (int.parse(bytes[0], radix: 16) - 40).toDouble();
-            }
-            break;
-          case '4106': // Fuel Trim = (A - 128) * 100/128
-            if (bytes.isNotEmpty) {
-              fuelTrim = (int.parse(bytes[0], radix: 16) - 128) * 100 / 128;
-            }
-            break;
-          case '43': // DTC response
-            if (bytes.isNotEmpty && bytes[0] != '00') {
-              dtcCodes = 'P${bytes[0]}${bytes.length > 1 ? bytes[1] : "00"}';
-            } else {
-              dtcCodes = '';
-            }
-            break;
+        if (clean.startsWith('410C')) {
+          // RPM = ((A*256) + B) / 4
+          final data = clean.substring(4);
+          if (data.length >= 4) {
+            final a = int.parse(data.substring(0, 2), radix: 16);
+            final b = int.parse(data.substring(2, 4), radix: 16);
+            rpm = (a * 256 + b) / 4.0;
+          }
+        } else if (clean.startsWith('410D')) {
+          // Speed = A km/h
+          final data = clean.substring(4);
+          if (data.length >= 2) {
+            speed = int.parse(data.substring(0, 2), radix: 16).toDouble();
+          }
+        } else if (clean.startsWith('4105')) {
+          // Coolant Temp = A - 40
+          final data = clean.substring(4);
+          if (data.length >= 2) {
+            coolantTemp = (int.parse(data.substring(0, 2), radix: 16) - 40).toDouble();
+          }
+        } else if (clean.startsWith('4106')) {
+          // Fuel Trim = (A - 128) * 100/128
+          final data = clean.substring(4);
+          if (data.length >= 2) {
+            fuelTrim = (int.parse(data.substring(0, 2), radix: 16) - 128) * 100 / 128;
+          }
+        } else if (clean.startsWith('43')) {
+          // DTC response
+          final data = clean.substring(2);
+          if (data.length >= 4 && data.substring(0, 4) != '0000') {
+            dtcCodes = 'P${data.substring(0, 4)}';
+          } else {
+            dtcCodes = '';
+          }
         }
       } catch (_) {}
     }
