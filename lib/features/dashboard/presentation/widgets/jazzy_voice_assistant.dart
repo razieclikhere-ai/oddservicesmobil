@@ -238,7 +238,7 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
                                   )
                                 : Text(
                                     _jazzySpeech,
-                                    style: const TextStyle(color: Colors.whiteEfficacy, fontSize: 13, height: 1.4),
+                                    style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
                                   )
                                     .animate(key: ValueKey(_jazzySpeech))
                                     .fadeIn(duration: 300.ms)
@@ -422,10 +422,4 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
         ),
       ],
     );
-  }
-}
-
-// Add simple extension to support WhiteEfficacy styling safely
-extension on TextStyle {
-  TextStyle get whiteEfficacy => copyWith(color: Colors.white70);
 }
