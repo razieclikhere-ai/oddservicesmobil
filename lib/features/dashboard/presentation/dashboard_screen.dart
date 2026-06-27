@@ -187,10 +187,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           IconButton(
             icon: Icon(
               obdState == ObdConnectionState.connected
-                  ? Icons.wifi
+                  ? Icons.bluetooth_connected
                   : obdState == ObdConnectionState.simulating
                       ? Icons.bolt
-                      : Icons.wifi_off,
+                      : Icons.bluetooth_disabled,
               color: obdState == ObdConnectionState.connected
                   ? AppTheme.neonGreen
                   : obdState == ObdConnectionState.simulating
@@ -242,7 +242,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         foregroundColor: Colors.black,
         icon: Icon(
           obdState == ObdConnectionState.disconnected
-              ? Icons.wifi_find
+              ? Icons.bluetooth_searching
               : Icons.power_settings_new,
           size: 20,
         ),
