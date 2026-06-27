@@ -33,6 +33,20 @@ jobs:
         flutter create . --org com.smart.obd --project-name smart_obd_assistant
         rm -rf test
 
+    - name: Patch Kotlin Gradle Plugin version to 1.9.24
+      run: |
+        python3 -c "
+        import os, re
+        if os.path.exists('android/settings.gradle'):
+            f=open('android/settings.gradle'); c=f.read(); f.close()
+            c=re.sub(r'id\s+[\"\']org\.jetbrains\.kotlin\.android[\"\']\s+version\s+[\"\'][^\"\']+[\"\']', 'id \"org.jetbrains.kotlin.android\" version \"1.9.24\"', c)
+            f=open('android/settings.gradle', 'w'); f.write(c); f.close()
+        if os.path.exists('android/build.gradle'):
+            f=open('android/build.gradle'); c=f.read(); f.close()
+            c=re.sub(r'ext\.kotlin_version\s*=\s*[\"\'][^\"\']+[\"\']', \"ext.kotlin_version = '1.9.24'\", c)
+            f=open('android/build.gradle', 'w'); f.write(c); f.close()
+        "
+
     - name: Copy AndroidManifest with Bluetooth permissions
       run: cp assets/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
 
