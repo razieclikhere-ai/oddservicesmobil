@@ -1,12 +1,15 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
-import 'package:flutter/foundation.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
 import 'ai_prediction_service.dart';
 import 'notification_service.dart';
-import 'package:uuid/uuid.dart';
+
+/// OBD connection mode:
+/// - simulation: generates realistic fake sensor data (always available, great for testing)
+/// - wifi: connects to ELM327 over TCP/WiFi on 192.168.0.10:35000 (common default IP)
+enum ObdConnectionMode { simulation, wifi }
 
 enum ObdConnectionState { disconnected, scanning, connecting, connected, simulating }
 
@@ -14,159 +17,236 @@ class ObdBluetoothService {
   static final ObdBluetoothService instance = ObdBluetoothService._internal();
   ObdBluetoothService._internal();
 
-  final _connectionStateController = StreamController<ObdConnectionState>.broadcast();
-  Stream<ObdConnectionState> get connectionStateStream => _connectionStateController.stream;
+  final _stateController = StreamController<ObdConnectionState>.broadcast();
+  Stream<ObdConnectionState> get connectionStateStream => _stateController.stream;
+
   ObdConnectionState _currentState = ObdConnectionState.disconnected;
   ObdConnectionState get currentState => _currentState;
 
-  BluetoothDevice? _connectedDevice;
-  StreamSubscription<List<ScanResult>>? _scanSubscription;
+  ObdConnectionMode _mode = ObdConnectionMode.simulation;
+  ObdConnectionMode get mode => _mode;
+
+  Socket? _socket;
   Timer? _simulationTimer;
+  Timer? _dbWriteTimer;
   final _random = Random();
+  bool _isRunning = false;
 
-  // OBD Sensor Live Data values
-  double coolantTemp = 90.0;
+  // ── Live sensor values (public for UI) ────────────────────────────────────
+  double coolantTemp    = 45.0;
   double batteryVoltage = 14.1;
-  double rpm = 800;
-  double speed = 0.0;
-  double fuelTrim = 0.0;
-  String dtcCodes = '';
-  int simulatedOdometer = 150000;
+  double rpm            = 0.0;
+  double speed          = 0.0;
+  double fuelTrim       = 0.0;
+  String dtcCodes       = '';
+  int    simulatedOdometer = 150000;
 
-  void _updateState(ObdConnectionState newState) {
-    _currentState = newState;
-    _connectionStateController.add(newState);
+  void _updateState(ObdConnectionState s) {
+    _currentState = s;
+    _stateController.add(s);
   }
 
-  // --- Bluetooth Connection logic ---
-  Future<void> connectToObd() async {
-    if (_currentState == ObdConnectionState.connected || _currentState == ObdConnectionState.simulating) {
-      return;
-    }
+  // ── Public API ─────────────────────────────────────────────────────────────
 
-    _updateState(ObdConnectionState.scanning);
+  /// Entry point — first tries WiFi, then falls back to simulation.
+  Future<void> connectToObd({ObdConnectionMode preferredMode = ObdConnectionMode.wifi}) async {
+    if (_isRunning) return;
+    _isRunning = true;
 
-    // Request permissions
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.bluetoothScan,
-      Permission.bluetoothConnect,
-      Permission.location,
-    ].request();
-
-    if (statuses[Permission.bluetoothScan]?.isDenied == true ||
-        statuses[Permission.bluetoothConnect]?.isDenied == true) {
-      // Permission denied, fallback to Simulation Mode
-      startSimulationMode();
-      return;
-    }
-
-    // Start scanning
-    try {
-      await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
-      
-      _scanSubscription = FlutterBluePlus.scanResults.listen((results) async {
-        for (ScanResult r in results) {
-          final name = r.device.platformName.toLowerCase();
-          if (name.contains('obd') || name.contains('elm327') || name.contains('v-link') || name.contains('diagnose')) {
-            // Found OBD adapter
-            _scanSubscription?.cancel();
-            await FlutterBluePlus.stopScan();
-            _updateState(ObdConnectionState.connecting);
-            
-            try {
-              await r.device.connect();
-              _connectedDevice = r.device;
-              _updateState(ObdConnectionState.connected);
-              _startLiveDataReader();
-              return;
-            } catch (e) {
-              // Connection failed, fallback to simulation
-              startSimulationMode();
-            }
-          }
-        }
-      });
-
-      // If scan finishes and no device is found
-      await Future.delayed(const Duration(seconds: 11));
-      if (_currentState == ObdConnectionState.scanning) {
-        startSimulationMode();
-      }
-    } catch (e) {
+    if (preferredMode == ObdConnectionMode.wifi) {
+      await _connectWifi();
+    } else {
       startSimulationMode();
     }
   }
 
-  // --- Simulated Live OBD Data ---
+  /// Force start simulation mode without trying hardware
   void startSimulationMode() {
-    _scanSubscription?.cancel();
+    _socket?.destroy();
+    _socket = null;
     _simulationTimer?.cancel();
+    _isRunning = true;
+    _mode = ObdConnectionMode.simulation;
     _updateState(ObdConnectionState.simulating);
 
     NotificationService.showInstantNotification(
       id: 1,
-      title: '🔌 Mode Simulasi OBD Aktif',
-      body: 'Tidak ada adaptor fisik terdeteksi. Data OBD akan disimulasikan untuk evaluasi AI.',
+      title: '🔌 Smart OBD – Mode Simulasi Aktif',
+      body: 'Tidak ada adaptor ELM327 terdeteksi. Data sensor disimulasikan untuk evaluasi AI.',
     );
 
-    _simulationTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
-      // Generate realistic values
-      rpm = 800 + _random.nextDouble() * 1200; // 800 - 2000 RPM
-      speed = (rpm > 1200) ? 40 + _random.nextDouble() * 60 : 0; // 0 - 100 km/h
-      
-      // Gradually rise coolant temp to operating ranges
-      if (coolantTemp < 96) {
-        coolantTemp += _random.nextDouble() * 0.8;
-      } else {
-        coolantTemp += _random.nextDouble() * 0.4 - 0.2;
-      }
+    // Simulate sensor readings every 2 seconds
+    _simulationTimer = Timer.periodic(const Duration(seconds: 2), (_) => _simulateTick());
 
-      // Simulate battery voltage slightly dropping/fluctuating
-      batteryVoltage = 13.8 + _random.nextDouble() * 0.6;
-      fuelTrim = -3.0 + _random.nextDouble() * 6.0; // -3% to +3%
-      
-      simulatedOdometer += (speed * (4 / 3600)).toInt(); // add mileage based on speed and time elapsed
-
-      // Occasionally simulate a warning trigger (e.g. low voltage or high temp) to test notifications
-      if (_random.nextDouble() < 0.05) {
-        batteryVoltage = 11.9; // low voltage
-        dtcCodes = 'P0171'; // System Too Lean
-        
-        await NotificationService.showInstantNotification(
-          id: 2,
-          title: '⚠️ Peringatan Tegangan Aki Rendah',
-          body: 'Tegangan terdeteksi $batteryVoltage V. Cek alternator atau ganti aki segera.',
-        );
-      }
-
-      // Save to database every 12 seconds
-      if (timer.tick % 3 == 0) {
-        await _saveScanRecord();
-      }
-    });
+    // Write to DB & call AI every 30 seconds
+    _dbWriteTimer = Timer.periodic(const Duration(seconds: 30), (_) => _saveScanRecord());
   }
 
-  Future<void> _saveScanRecord() async {
-    final uuid = const Uuid().v4();
-    final now = DateTime.now().toIso8601String();
+  void disconnect() {
+    _isRunning = false;
+    _simulationTimer?.cancel();
+    _dbWriteTimer?.cancel();
+    _socket?.destroy();
+    _socket = null;
+    _updateState(ObdConnectionState.disconnected);
+  }
 
+  // ── WiFi / TCP connection (ELM327 WiFi adapter) ────────────────────────────
+
+  Future<void> _connectWifi({
+    String host = '192.168.0.10',
+    int port = 35000,
+  }) async {
+    _updateState(ObdConnectionState.scanning);
+    try {
+      _updateState(ObdConnectionState.connecting);
+      _socket = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
+      _mode = ObdConnectionMode.wifi;
+      _updateState(ObdConnectionState.connected);
+
+      NotificationService.showInstantNotification(
+        id: 1,
+        title: '✅ ELM327 WiFi Terhubung',
+        body: 'Adaptor OBD-II terhubung melalui WiFi di $host:$port',
+      );
+
+      _socket!.listen(
+        _onWifiData,
+        onError: (_) => startSimulationMode(),
+        onDone:  ()  => startSimulationMode(),
+      );
+
+      // Init ELM327
+      _sendCommand('ATZ');
+      await Future.delayed(const Duration(milliseconds: 500));
+      _sendCommand('ATE0'); // echo off
+      _sendCommand('ATH0'); // headers off
+      _sendCommand('ATSP0'); // auto protocol
+
+      // Poll PIDs every 2 seconds
+      _simulationTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollPids());
+      _dbWriteTimer    = Timer.periodic(const Duration(seconds: 30), (_) => _saveScanRecord());
+
+    } catch (_) {
+      // WiFi failed → simulation
+      startSimulationMode();
+    }
+  }
+
+  void _sendCommand(String cmd) {
+    try {
+      _socket?.write('$cmd\r');
+    } catch (_) {}
+  }
+
+  final _wifiBuffer = StringBuffer();
+
+  void _onWifiData(List<int> data) {
+    final chunk = String.fromCharCodes(data);
+    _wifiBuffer.write(chunk);
+    if (_wifiBuffer.toString().contains('>')) {
+      final response = _wifiBuffer.toString().replaceAll('>', '').trim();
+      _parseObdResponse(response);
+      _wifiBuffer.clear();
+    }
+  }
+
+  void _pollPids() {
+    _sendCommand('010C'); // RPM
+    _sendCommand('010D'); // Speed
+    _sendCommand('0105'); // Coolant temp
+    _sendCommand('0142'); // Control module voltage
+    _sendCommand('0106'); // Short term fuel trim
+    _sendCommand('03');   // DTCs
+  }
+
+  void _parseObdResponse(String raw) {
+    final lines = raw.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+    for (final line in lines) {
+      if (line.length < 4) continue;
+      final pid = line.substring(0, 4).toUpperCase();
+      final bytes = line.substring(4).trim().split(' ');
+      if (bytes.length < 2) continue;
+      try {
+        switch (pid) {
+          case '410C': // RPM = (A*256 + B) / 4
+            final a = int.parse(bytes[0], radix: 16);
+            final b = int.parse(bytes[1], radix: 16);
+            rpm = (a * 256 + b) / 4.0;
+            break;
+          case '410D': // Speed = A km/h
+            speed = int.parse(bytes[0], radix: 16).toDouble();
+            break;
+          case '4105': // Coolant = A - 40
+            coolantTemp = int.parse(bytes[0], radix: 16) - 40.0;
+            break;
+          case '4142': // Voltage = (A*256 + B) / 1000
+            final a = int.parse(bytes[0], radix: 16);
+            final b = int.parse(bytes[1], radix: 16);
+            batteryVoltage = (a * 256 + b) / 1000.0;
+            break;
+          case '4106': // Fuel trim = (A - 128) * 100/128
+            fuelTrim = (int.parse(bytes[0], radix: 16) - 128) * 100 / 128;
+            break;
+        }
+      } catch (_) {}
+    }
+  }
+
+  // ── Simulation tick ────────────────────────────────────────────────────────
+  void _simulateTick() {
+    // Warm up the engine gradually
+    if (coolantTemp < 90) {
+      coolantTemp += _random.nextDouble() * 1.2;
+    } else {
+      coolantTemp = 87 + _random.nextDouble() * 6;
+    }
+
+    // Realistic idle → driving cycle
+    final driving = _random.nextDouble() > 0.4;
+    rpm   = driving ? 1200 + _random.nextDouble() * 2000 : 750 + _random.nextDouble() * 100;
+    speed = driving ? 20   + _random.nextDouble() * 80  : 0;
+
+    batteryVoltage = driving ? 13.8 + _random.nextDouble() * 0.5
+                             : 12.2 + _random.nextDouble() * 0.4;
+
+    fuelTrim = -3.0 + _random.nextDouble() * 6.0;
+    simulatedOdometer += (speed * (2 / 3600)).toInt();
+
+    // Occasional alerts (5% chance)
+    if (_random.nextDouble() < 0.05) {
+      batteryVoltage = 11.5 + _random.nextDouble() * 0.4;
+      dtcCodes = _random.nextBool() ? 'P0171' : 'P0300';
+      NotificationService.showInstantNotification(
+        id: 2,
+        title: '⚠️ Peringatan Sensor OBD',
+        body: dtcCodes == 'P0171'
+            ? 'P0171 – Campuran bahan bakar terlalu kurus. Cek sensor O2 atau filter udara.'
+            : 'P0300 – Misfire terdeteksi. Cek busi dan koil pengapian.',
+      );
+    } else {
+      dtcCodes = '';
+    }
+  }
+
+  // ── Database + AI ──────────────────────────────────────────────────────────
+  Future<void> _saveScanRecord() async {
     await AppDatabase.insertScan({
-      'uuid': uuid,
+      'uuid': const Uuid().v4(),
       'vehicle_uuid': 'default-honda-jazz-ge8',
-      'scan_date': now,
+      'scan_date': DateTime.now().toIso8601String(),
       'coolant_temp': coolantTemp,
       'battery_voltage': batteryVoltage,
       'rpm': rpm,
       'speed': speed,
       'fuel_trim': fuelTrim,
       'dtc_codes': dtcCodes,
-      'notes': 'Pembacaan parameter sensor real-time via koneksi OBD.',
+      'notes': _mode == ObdConnectionMode.wifi ? 'WiFi ELM327 live data' : 'Simulated live data',
       'mileage': simulatedOdometer,
     });
 
     await AppDatabase.updateVehicleMileage('default-honda-jazz-ge8', simulatedOdometer);
 
-    // Call AI to predict & update maintenance schedules
     await AiPredictionService.predictAndSchedule(
       vehicleUuid: 'default-honda-jazz-ge8',
       vehicleName: 'Honda Jazz GE8',
@@ -177,17 +257,5 @@ class ObdBluetoothService {
       fuelTrim: fuelTrim,
       dtcCodes: dtcCodes,
     );
-  }
-
-  void _startLiveDataReader() {
-    // Read PIDs from device via BLE services if physical device is connected
-    // This runs in background
-  }
-
-  void disconnect() {
-    _simulationTimer?.cancel();
-    _scanSubscription?.cancel();
-    _connectedDevice?.disconnect();
-    _updateState(ObdConnectionState.disconnected);
   }
 }
