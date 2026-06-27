@@ -6,6 +6,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/services/obd_bluetooth_service.dart';
+import 'widgets/jazzy_voice_assistant.dart';
 import '../../../core/database/app_database.dart';
 
 /// Main scaffold with bottom nav — wraps all primary screens
@@ -30,7 +31,16 @@ class _HomeShellState extends State<HomeShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
-      body: IndexedStack(index: _navIndex, children: _pages),
+      body: Stack(
+        children: [
+          IndexedStack(index: _navIndex, children: _pages),
+          const Positioned(
+            bottom: 16,
+            right: 16,
+            child: JazzyVoiceAssistant(),
+          ),
+        ],
+      ),
       bottomNavigationBar: _buildBottomNav(),
     );
   }
@@ -189,8 +199,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 // ── Recent scan history ───────────────────────────────────────
                 if (_recentScans.isNotEmpty) ...[
-                  _SectionHeader(title: 'Riwayat Scan Terakhir'),
-                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Riwayat Scan Terakhir', style: TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.bold)),
+                      TextButton(
+                        onPressed: () => context.push('/scan-history'),
+                        child: const Text('Lihat Semua', style: TextStyle(color: AppTheme.neonCyan, fontSize: 12, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
                   _RecentScansTable(scans: _recentScans),
                 ],
                 const SizedBox(height: 100),

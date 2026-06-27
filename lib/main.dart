@@ -44,6 +44,8 @@ class SmartOBDApp extends StatelessWidget {
   }
 }
 
+import 'features/dashboard/presentation/scan_history_page.dart';
+
 final _router = GoRouter(
   initialLocation: '/splash',
   routes: [
@@ -56,6 +58,11 @@ final _router = GoRouter(
       path: '/dashboard',
       name: 'dashboard',
       builder: (context, state) => const HomeShell(),
+    ),
+    GoRoute(
+      path: '/scan-history',
+      name: 'scan-history',
+      builder: (context, state) => const ScanHistoryPage(),
     ),
     GoRoute(
       path: '/chatbot',

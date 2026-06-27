@@ -144,4 +144,66 @@ Berdasarkan parameter di atas, tentukan/prediksikan jadwal servis/perawatan berk
       );
     }
   }
+
+  static Future<String> getJazzyResponse({
+    required String query,
+    required double coolantTemp,
+    required double batteryVoltage,
+    required double rpm,
+    required double speed,
+    required String dtcCodes,
+  }) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://api.groq.com/openai/v1',
+      headers: {
+        'Authorization': 'Bearer $_apiKey',
+        'Content-Type': 'application/json',
+      },
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 15),
+    ));
+
+    final systemPrompt = '''
+Kamu adalah Jazzy, asisten suara AI mekanik pribadi untuk mobil Honda Jazz GE8 milik pengguna.
+Gaya bicaramu sangat ramah, santai, profesional, dan menggunakan bahasa Indonesia yang alami (boleh campur bahasa gaul/akrab seperti 'Bos', 'Om', atau 'Bro').
+Jawab pertanyaan pengguna dengan singkat, padat, dan solutif (maksimal 2 kalimat pendek).
+Berikut adalah data sensor OBD-II mobil saat ini:
+- RPM: $rpm RPM
+- Suhu Pendingin (Coolant): $coolantTemp °C
+- Tegangan Aki (Voltage): $batteryVoltage V
+- Kecepatan: $speed km/h
+- Kode Error (DTC): ${dtcCodes.isEmpty ? "Tidak ada" : dtcCodes}
+''';
+
+    try {
+      final response = await dio.post(
+        '/chat/completions',
+        data: {
+          'model': 'llama3-8b-8192',
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': query},
+          ],
+          'temperature': 0.7,
+        },
+      );
+
+      return response.data['choices'][0]['message']['content'] as String;
+    } catch (_) {
+      final q = query.toLowerCase();
+      if (q.contains('aki') || q.contains('baterai') || q.contains('volt')) {
+        return 'Tegangan aki Anda saat ini ${batteryVoltage.toStringAsFixed(2)} Volt. Kondisinya ${batteryVoltage < 12.0 ? "lemah, sebaiknya segera dicas atau ganti" : "sangat prima, Bos!"}';
+      }
+      if (q.contains('suhu') || q.contains('panas') || q.contains('coolant') || q.contains('temperatur')) {
+        return 'Suhu pendingin mesin saat ini ${coolantTemp.toStringAsFixed(1)} derajat Celsius. ${coolantTemp > 100 ? "Wah, agak panas nih Bos. Cek air radiator ya!" : "Mesin masih dalam suhu kerja normal."}';
+      }
+      if (q.contains('kondisi') || q.contains('sehat') || q.contains('kerusakan') || q.contains('error') || q.contains('dtc')) {
+        if (dtcCodes.isNotEmpty) {
+          return 'Ada kode error terdeteksi yaitu $dtcCodes. Sebaiknya Anda menanyakan masalah ini ke asisten AI di tab tanya mekanik.';
+        }
+        return 'Semua sensor OBD termonitor normal. RPM stabil di ${rpm.toStringAsFixed(0)} dan tegangan baterai ${batteryVoltage.toStringAsFixed(1)} Volt. Siap gas pol, Bos!';
+      }
+      return 'Halo Bos! Ada yang bisa Jazzy bantu soal kondisi mesin Honda Jazz GE8 Anda hari ini?';
+    }
+  }
 }
