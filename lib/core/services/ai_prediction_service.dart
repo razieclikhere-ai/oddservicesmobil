@@ -207,4 +207,108 @@ Berikut adalah data sensor OBD-II mobil saat ini:
       return 'Halo Bos! Ada yang bisa Jazzy bantu soal kondisi mesin Honda Jazz GE8 Anda hari ini?';
     }
   }
+
+  static Future<void> analyzeServiceLogAndSchedule({
+    required String vehicleUuid,
+    required String serviceType,
+    required String oilBrand,
+    required int currentMileage,
+    required int nextTargetMileage,
+    required DateTime serviceDate,
+  }) async {
+    final dio = Dio(BaseOptions(
+      baseUrl: 'https://api.groq.com/openai/v1',
+      headers: {
+        'Authorization': 'Bearer $_apiKey',
+        'Content-Type': 'application/json',
+      },
+      connectTimeout: const Duration(seconds: 10),
+      receiveTimeout: const Duration(seconds: 15),
+    ));
+
+    final systemPrompt = '''
+Kamu adalah sahabat mekanik profesional AI. Tugasmu menganalisis catatan servis yang baru dilakukan dan memperkirakan tanggal rekomendasi servis berikutnya.
+Analisis data berikut:
+- Tipe Servis: $serviceType
+- Merek Oli/Sparepart: ${oilBrand.isEmpty ? "Tidak ditentukan" : oilBrand}
+- Odometer saat Servis: $currentMileage km
+- Target Odometer Servis Berikutnya: $nextTargetMileage km
+- Tanggal Servis: ${serviceDate.toIso8601String()}
+
+Kembalikan hasil dalam format JSON objek dengan properti berikut:
+1. "predicted_days": jumlah hari dari tanggal servis saat ini untuk melakukan servis berikutnya (angka saja, misalnya 180).
+2. "recommendation": rekomendasi hangat dan ramah layaknya sahabat (maksimal 2 kalimat, panggil pengguna dengan "Bos", "Bro", atau "Om").
+''';
+
+    try {
+      final response = await dio.post(
+        '/chat/completions',
+        data: {
+          'model': 'llama3-8b-8192',
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': 'Prediksikan jadwal berikutnya.'},
+          ],
+          'temperature': 0.3,
+          'response_format': {'type': 'json_object'},
+        },
+      );
+
+      final cleanJson = response.data['choices'][0]['message']['content'] as String;
+      final Map<String, dynamic> result = jsonDecode(cleanJson);
+      final int days = result['predicted_days'] as int? ?? 180;
+      final String recommendation = result['recommendation'] as String? ?? 'Waktunya melakukan perawatan berkala, Bos!';
+
+      final nextDate = serviceDate.add(Duration(days: days));
+
+      // Update service schedule in database
+      await AppDatabase.insertOrUpdateSchedule({
+        'uuid': '${vehicleUuid}_${serviceType.toLowerCase().replaceAll(' ', '_')}',
+        'vehicle_uuid': vehicleUuid,
+        'service_name': serviceType,
+        'description': '$recommendation (Oli: $oilBrand)',
+        'interval_mileage': nextTargetMileage - currentMileage,
+        'interval_months': (days / 30).round(),
+        'last_service_mileage': currentMileage,
+        'last_service_date': serviceDate.toIso8601String(),
+        'next_predicted_date': nextDate.toIso8601String(),
+        'next_predicted_mileage': nextTargetMileage,
+        'is_enabled': 1,
+      });
+
+      // Schedule notification
+      await NotificationService.scheduleNotification(
+        id: serviceType.hashCode,
+        title: '📅 Jadwal Servis: $serviceType',
+        body: '$recommendation Target Odo: $nextTargetMileage km.',
+        scheduledDate: nextDate.subtract(const Duration(days: 3)),
+      );
+    } catch (_) {
+      // Local fallback prediction if Groq fails
+      final int defaultDays = serviceType.toLowerCase().contains('oli') ? 180 : 360;
+      final nextDate = serviceDate.add(Duration(days: defaultDays));
+      final rec = 'Prediksi lokal: Perawatan berkala untuk $serviceType berikutnya direkomendasikan dalam $defaultDays hari.';
+
+      await AppDatabase.insertOrUpdateSchedule({
+        'uuid': '${vehicleUuid}_${serviceType.toLowerCase().replaceAll(' ', '_')}',
+        'vehicle_uuid': vehicleUuid,
+        'service_name': serviceType,
+        'description': '$rec (Oli: $oilBrand)',
+        'interval_mileage': nextTargetMileage - currentMileage,
+        'interval_months': (defaultDays / 30).round(),
+        'last_service_mileage': currentMileage,
+        'last_service_date': serviceDate.toIso8601String(),
+        'next_predicted_date': nextDate.toIso8601String(),
+        'next_predicted_mileage': nextTargetMileage,
+        'is_enabled': 1,
+      });
+
+      await NotificationService.scheduleNotification(
+        id: serviceType.hashCode,
+        title: '📅 Pengingat Servis: $serviceType',
+        body: 'Jangan lupa untuk melakukan servis $serviceType di $nextTargetMileage km.',
+        scheduledDate: nextDate.subtract(const Duration(days: 3)),
+      );
+    }
+  }
 }

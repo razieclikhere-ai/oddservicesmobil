@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'features/dashboard/presentation/dashboard_screen.dart';
+import 'features/dashboard/presentation/scan_history_page.dart';
+import 'features/dashboard/presentation/service_logs_page.dart';
 import 'features/chatbot/presentation/chatbot_screen.dart';
 import 'features/inspection/presentation/inspection_checklist_screen.dart';
 import 'features/vehicles/presentation/vehicles_screen.dart';
@@ -44,8 +46,6 @@ class SmartOBDApp extends StatelessWidget {
   }
 }
 
-import 'features/dashboard/presentation/scan_history_page.dart';
-
 final _router = GoRouter(
   initialLocation: '/splash',
   routes: [
@@ -63,6 +63,11 @@ final _router = GoRouter(
       path: '/scan-history',
       name: 'scan-history',
       builder: (context, state) => const ScanHistoryPage(),
+    ),
+    GoRoute(
+      path: '/service-logs',
+      name: 'service-logs',
+      builder: (context, state) => const ServiceLogsPage(),
     ),
     GoRoute(
       path: '/chatbot',

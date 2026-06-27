@@ -15,7 +15,7 @@ class AppDatabase {
     final path = p.join(dbPath, 'smart_obd.db');
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: (db, version) async {
         await db.execute('''
           CREATE TABLE vehicles (
@@ -75,6 +75,22 @@ class AppDatabase {
           )
         ''');
 
+        await db.execute('''
+          CREATE TABLE service_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uuid TEXT NOT NULL UNIQUE,
+            vehicle_uuid TEXT NOT NULL,
+            service_date TEXT NOT NULL,
+            service_type TEXT NOT NULL,
+            oil_brand TEXT,
+            current_mileage INTEGER NOT NULL,
+            next_target_mileage INTEGER,
+            cost INTEGER DEFAULT 0,
+            notes TEXT,
+            created_at TEXT NOT NULL
+          )
+        ''');
+
         // Seed default vehicle
         await db.insert('vehicles', {
           'uuid': 'default-honda-jazz-ge8',
@@ -97,6 +113,25 @@ class AppDatabase {
         // Seed schedules
         for (final s in _defaultSchedules('default-honda-jazz-ge8')) {
           await db.insert('service_schedules', s);
+        }
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute('''
+            CREATE TABLE service_logs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              uuid TEXT NOT NULL UNIQUE,
+              vehicle_uuid TEXT NOT NULL,
+              service_date TEXT NOT NULL,
+              service_type TEXT NOT NULL,
+              oil_brand TEXT,
+              current_mileage INTEGER NOT NULL,
+              next_target_mileage INTEGER,
+              cost INTEGER DEFAULT 0,
+              notes TEXT,
+              created_at TEXT NOT NULL
+            )
+          ''');
         }
       },
     );
@@ -194,5 +229,26 @@ class AppDatabase {
   static Future<int> insertOrUpdateSchedule(Map<String, dynamic> schedule) async {
     final db = await database;
     return await db.insert('service_schedules', schedule, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  // --- Service Logs CRUD ---
+  static Future<int> insertServiceLog(Map<String, dynamic> log) async {
+    final db = await database;
+    return await db.insert('service_logs', log, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<List<Map<String, dynamic>>> getServiceLogs(String vehicleUuid) async {
+    final db = await database;
+    return await db.query('service_logs', where: 'vehicle_uuid = ?', whereArgs: [vehicleUuid], orderBy: 'service_date DESC');
+  }
+
+  static Future<int> updateServiceLog(Map<String, dynamic> log) async {
+    final db = await database;
+    return await db.update('service_logs', log, where: 'uuid = ?', whereArgs: [log['uuid']]);
+  }
+
+  static Future<int> deleteServiceLog(String uuid) async {
+    final db = await database;
+    return await db.delete('service_logs', where: 'uuid = ?', whereArgs: [uuid]);
   }
 }
