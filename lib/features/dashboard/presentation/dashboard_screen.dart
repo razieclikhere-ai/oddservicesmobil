@@ -1,10 +1,12 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:connectivity_plus/connectivity_plus.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/services/obd_bluetooth_service.dart';
+import '../../../core/database/app_database.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({Key? key}) : super(key: key);
@@ -15,15 +17,56 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   String _selectedVehicle = "Honda Jazz GE8 2020";
+  StreamSubscription<ObdConnectionState>? _stateSubscription;
+  Timer? _uiRefreshTimer;
+  List<Map<String, dynamic>> _predictions = [];
 
   final List<Map<String, dynamic>> _vehicles = [
-    {"name": "Honda Jazz GE8 2020", "score": 92, "status": "Sehat", "brand": "Honda"},
-    {"name": "Toyota Avanza 2020", "score": 85, "status": "Perlu Servis", "brand": "Toyota"},
-    {"name": "Mitsubishi Pajero 2018", "score": 97, "status": "Prima", "brand": "Mitsubishi"},
+    {"name": "Honda Jazz GE8 2020", "score": 92, "status": "Sehat", "brand": "Honda", "uuid": "default-honda-jazz-ge8"},
+    {"name": "Toyota Avanza 2020", "score": 85, "status": "Perlu Servis", "brand": "Toyota", "uuid": "toyota-avanza-uuid"},
+    {"name": "Mitsubishi Pajero 2018", "score": 97, "status": "Prima", "brand": "Mitsubishi", "uuid": "pajero-uuid"},
   ];
 
   Map<String, dynamic> get _currentVehicle =>
       _vehicles.firstWhere((v) => v['name'] == _selectedVehicle);
+
+  @override
+  void initState() {
+    super.initState();
+    // Listen to connection updates
+    _stateSubscription = ObdBluetoothService.instance.connectionStateStream.listen((state) {
+      if (mounted) {
+        setState(() {});
+        _loadPredictions();
+      }
+    });
+
+    // Refresh UI parameters periodically (RPM, Speed updates etc.)
+    _uiRefreshTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+
+    _loadPredictions();
+  }
+
+  Future<void> _loadPredictions() async {
+    final vehicleUuid = _currentVehicle['uuid'] as String;
+    final schedules = await AppDatabase.getSchedules(vehicleUuid);
+    if (mounted) {
+      setState(() {
+        _predictions = schedules;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _stateSubscription?.cancel();
+    _uiRefreshTimer?.cancel();
+    super.dispose();
+  }
 
   void _showVehicleSelector() {
     showModalBottomSheet(
@@ -52,6 +95,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
               return InkWell(
                 onTap: () {
                   setState(() => _selectedVehicle = v['name']);
+                  _loadPredictions();
                   Navigator.pop(context);
                 },
                 borderRadius: BorderRadius.circular(12),
@@ -90,10 +134,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  void _toggleObdConnection() {
+    final state = ObdBluetoothService.instance.currentState;
+    if (state == ObdConnectionState.disconnected) {
+      ObdBluetoothService.instance.connectToObd();
+    } else {
+      ObdBluetoothService.instance.disconnect();
+    }
+    setState(() {});
+  }
+
   @override
   Widget build(BuildContext context) {
     final vehicle = _currentVehicle;
     final int score = vehicle['score'];
+    final obdState = ObdBluetoothService.instance.currentState;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
@@ -114,16 +169,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
             tooltip: 'AI Chatbot',
           ),
           IconButton(
-            icon: const Icon(Icons.notifications_none, color: Colors.white),
-            onPressed: () {},
-            tooltip: 'Notifikasi',
+            icon: Icon(
+              obdState == ObdConnectionState.connected
+                  ? Icons.bluetooth_connected
+                  : obdState == ObdConnectionState.simulating
+                      ? Icons.bolt
+                      : Icons.bluetooth_disabled,
+              color: obdState == ObdConnectionState.connected
+                  ? AppTheme.neonGreen
+                  : obdState == ObdConnectionState.simulating
+                      ? AppTheme.neonYellow
+                      : Colors.grey,
+            ),
+            onPressed: _toggleObdConnection,
+            tooltip: 'Status Koneksi OBD',
           ),
           const SizedBox(width: 8),
         ],
       ),
       body: RefreshIndicator(
         color: AppTheme.neonCyan,
-        onRefresh: () async => await Future.delayed(const Duration(milliseconds: 800)),
+        onRefresh: () async {
+          await _loadPredictions();
+        },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
@@ -138,13 +206,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(height: 12),
               _buildTelemetryGrid(),
               const SizedBox(height: 24),
-              _buildSectionTitle('Komponen Kendaraan'),
+              _buildSectionTitle('AI Predicted Service & Schedules'),
               const SizedBox(height: 12),
-              _buildComponentRow(),
-              const SizedBox(height: 24),
-              _buildSectionTitle('AI Diagnostics & Alerts'),
-              const SizedBox(height: 12),
-              _buildAIAlerts(),
+              _buildPredictionList(),
               const SizedBox(height: 24),
               _buildSectionTitle('Inspeksi Kendaraan'),
               const SizedBox(height: 12),
@@ -155,11 +219,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
-        backgroundColor: AppTheme.neonCyan,
+        onPressed: _toggleObdConnection,
+        backgroundColor: obdState == ObdConnectionState.disconnected
+            ? AppTheme.neonCyan
+            : AppTheme.neonOrange,
         foregroundColor: Colors.black,
-        icon: const Icon(Icons.bluetooth_searching, size: 20),
-        label: const Text('Scan OBD-II', style: TextStyle(fontWeight: FontWeight.bold)),
+        icon: Icon(
+          obdState == ObdConnectionState.disconnected
+              ? Icons.bluetooth_searching
+              : Icons.power_settings_new,
+          size: 20,
+        ),
+        label: Text(
+          obdState == ObdConnectionState.disconnected
+              ? 'Scan OBD-II'
+              : obdState == ObdConnectionState.scanning
+                  ? 'Scanning...'
+                  : 'Disconnect OBD',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
       ).animate().scale(delay: 500.ms, duration: 400.ms, curve: Curves.elasticOut),
     );
   }
@@ -174,13 +252,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildHeader() {
+    final obdState = ObdBluetoothService.instance.currentState;
+    String statusStr = 'Disambungkan';
+    Color statusColor = Colors.grey;
+
+    if (obdState == ObdConnectionState.scanning) {
+      statusStr = 'Mencari Perangkat BLE...';
+      statusColor = AppTheme.neonCyan;
+    } else if (obdState == ObdConnectionState.connecting) {
+      statusStr = 'Menghubungkan...';
+      statusColor = AppTheme.neonCyan;
+    } else if (obdState == ObdConnectionState.connected) {
+      statusStr = 'OBD-II Terkoneksi';
+      statusColor = AppTheme.neonGreen;
+    } else if (obdState == ObdConnectionState.simulating) {
+      statusStr = 'Simulasi Telemetry Aktif';
+      statusColor = AppTheme.neonYellow;
+    } else {
+      statusStr = 'Adaptor OBD Terputus';
+      statusColor = Colors.grey;
+    }
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Selamat Datang,', style: TextStyle(color: Colors.grey[500], fontSize: 13)),
+            Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+                ),
+                const SizedBox(width: 6),
+                Text(statusStr, style: TextStyle(color: statusColor, fontSize: 12, fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const SizedBox(height: 4),
             const Text('Pengendara Cerdas 🚗',
                 style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
           ],
@@ -217,6 +327,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             : AppTheme.neonOrange;
     String statusText = score >= 90 ? 'Sistem Prima' : score >= 75 ? 'Perlu Perhatian' : 'Segera Servis';
 
+    final odometer = ObdBluetoothService.instance.simulatedOdometer;
+
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
@@ -237,6 +349,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 8),
                   Text(_selectedVehicle,
                       style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 6),
+                  Text('Mileage: $odometer km', style: const TextStyle(color: Colors.grey, fontSize: 13)),
                   const SizedBox(height: 12),
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
@@ -281,11 +395,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildTelemetryGrid() {
+    final obd = ObdBluetoothService.instance;
     final data = [
-      {'title': 'Engine Load', 'value': '24%', 'icon': FontAwesomeIcons.gauge, 'color': AppTheme.neonCyan},
-      {'title': 'Coolant Temp', 'value': '89°C', 'icon': FontAwesomeIcons.thermometerEmpty, 'color': AppTheme.neonGreen},
-      {'title': 'Battery', 'value': '12.4V', 'icon': FontAwesomeIcons.carBattery, 'color': AppTheme.neonCyan},
-      {'title': 'RPM', 'value': '1,200', 'icon': FontAwesomeIcons.bolt, 'color': AppTheme.neonOrange},
+      {'title': 'Engine Load', 'value': '${(obd.rpm / 60).toStringAsFixed(0)}%', 'icon': FontAwesomeIcons.gauge, 'color': AppTheme.neonCyan},
+      {'title': 'Coolant Temp', 'value': '${obd.coolantTemp.toStringAsFixed(1)}°C', 'icon': FontAwesomeIcons.thermometerEmpty, 'color': obd.coolantTemp > 100 ? AppTheme.neonOrange : AppTheme.neonGreen},
+      {'title': 'Battery', 'value': '${obd.batteryVoltage.toStringAsFixed(2)}V', 'icon': FontAwesomeIcons.carBattery, 'color': obd.batteryVoltage < 12.0 ? AppTheme.neonOrange : AppTheme.neonCyan},
+      {'title': 'RPM', 'value': obd.rpm.toStringAsFixed(0), 'icon': FontAwesomeIcons.bolt, 'color': AppTheme.neonOrange},
     ];
 
     return GridView.count(
@@ -337,87 +452,90 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildComponentRow() {
-    final components = [
-      {'label': 'Mesin', 'icon': Icons.settings, 'status': 'normal', 'value': 'OK'},
-      {'label': 'Rem', 'icon': Icons.radio_button_checked, 'status': 'normal', 'value': 'OK'},
-      {'label': 'Oli', 'icon': FontAwesomeIcons.oilCan, 'status': 'warning', 'value': '~9K'},
-      {'label': 'Ban', 'icon': FontAwesomeIcons.circleHalfStroke, 'status': 'normal', 'value': 'OK'},
-    ];
+  Widget _buildPredictionList() {
+    if (_predictions.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppTheme.darkSurface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.04)),
+        ),
+        child: const Center(
+          child: Text(
+            'Belum ada data prediksi AI. Hubungkan OBD-II untuk memicu analisis.',
+            style: TextStyle(color: Colors.grey, fontSize: 13),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+    }
 
-    return Row(
-      children: components.map((c) {
-        final color = c['status'] == 'critical'
-            ? AppTheme.neonOrange
-            : c['status'] == 'warning'
-                ? AppTheme.neonYellow
-                : AppTheme.neonGreen;
-        return Expanded(
-          child: Container(
-            margin: const EdgeInsets.only(right: 8),
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-            decoration: BoxDecoration(
-              color: AppTheme.darkSurface,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: color.withOpacity(0.2)),
-            ),
-            child: Column(
-              children: [
-                Icon(c['icon'] as IconData, color: color, size: 22),
-                const SizedBox(height: 6),
-                Text(c['label'] as String, style: const TextStyle(color: Colors.grey, fontSize: 10)),
-                Text(c['value'] as String, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
-              ],
-            ),
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: _predictions.length,
+      itemBuilder: (context, index) {
+        final pred = _predictions[index];
+        final name = pred['service_name'] as String;
+        final desc = pred['description'] as String;
+        final predDateStr = pred['next_predicted_date'] as String?;
+        final predMil = pred['next_predicted_mileage'] as int?;
+
+        String formattedDate = 'TBD';
+        if (predDateStr != null) {
+          final dt = DateTime.parse(predDateStr);
+          formattedDate = '${dt.day}/${dt.month}/${dt.year}';
+        }
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.darkSurface,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: Colors.white.withOpacity(0.04)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(FontAwesomeIcons.circleExclamation, color: AppTheme.neonCyan, size: 16),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                    const SizedBox(height: 4),
+                    Text(desc, style: TextStyle(color: Colors.grey[400], fontSize: 12, height: 1.4)),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.calendar_today, size: 12, color: Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Text(formattedDate, style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
+                        const SizedBox(width: 16),
+                        Icon(Icons.speed, size: 12, color: Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Text(predMil != null ? '$predMil km' : 'TBD', style: TextStyle(color: Colors.grey[500], fontSize: 11, fontWeight: FontWeight.bold)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
-      }).toList(),
-    ).animate().fade(delay: 150.ms);
-  }
-
-  Widget _buildAIAlerts() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.neonOrange.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.neonOrange.withOpacity(0.25)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(FontAwesomeIcons.triangleExclamation, color: AppTheme.neonOrange, size: 20),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Oli Mesin Hampir Habis Interval',
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 5),
-                Text('Sudah ~9.000 km sejak penggantian oli terakhir. Direkomendasikan servis dalam 1.000 km ke depan.',
-                    style: TextStyle(color: Colors.grey[400], fontSize: 13, height: 1.4)),
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () => context.push('/chatbot'),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppTheme.neonCyan.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppTheme.neonCyan.withOpacity(0.3)),
-                    ),
-                    child: const Text('Tanya AI →',
-                        style: TextStyle(color: AppTheme.neonCyan, fontSize: 12, fontWeight: FontWeight.bold)),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    ).animate().fadeIn(delay: 200.ms);
+      },
+    ).animate().fade(delay: 200.ms);
   }
 
   Widget _buildInspectionBanner() {

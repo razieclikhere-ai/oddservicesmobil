@@ -51,6 +51,8 @@ class AppDatabase {
             interval_months INTEGER NOT NULL,
             last_service_mileage INTEGER DEFAULT 0,
             last_service_date TEXT,
+            next_predicted_date TEXT,
+            next_predicted_mileage INTEGER,
             is_enabled INTEGER DEFAULT 1,
             FOREIGN KEY (vehicle_uuid) REFERENCES vehicles (uuid)
           )
@@ -69,6 +71,7 @@ class AppDatabase {
             fuel_trim REAL,
             dtc_codes TEXT,
             notes TEXT,
+            mileage INTEGER DEFAULT 0,
             FOREIGN KEY (vehicle_uuid) REFERENCES vehicles (uuid)
           )
         ''');
@@ -101,11 +104,78 @@ class AppDatabase {
   }
 
   static List<Map<String, dynamic>> _defaultSchedules(String vehicleUuid) {
+    final now = DateTime.now();
     return [
-      {'uuid': '${vehicleUuid}_oil', 'vehicle_uuid': vehicleUuid, 'service_name': 'Oil Change', 'interval_mileage': 10000, 'interval_months': 6, 'last_service_mileage': 140000},
-      {'uuid': '${vehicleUuid}_spark', 'vehicle_uuid': vehicleUuid, 'service_name': 'Spark Plugs', 'interval_mileage': 40000, 'interval_months': 24, 'last_service_mileage': 120000},
-      {'uuid': '${vehicleUuid}_brake_fluid', 'vehicle_uuid': vehicleUuid, 'service_name': 'Brake Fluid', 'interval_mileage': 40000, 'interval_months': 24, 'last_service_mileage': 130000},
-      {'uuid': '${vehicleUuid}_coolant', 'vehicle_uuid': vehicleUuid, 'service_name': 'Coolant', 'interval_mileage': 60000, 'interval_months': 36, 'last_service_mileage': 100000},
+      {
+        'uuid': '${vehicleUuid}_oil',
+        'vehicle_uuid': vehicleUuid,
+        'service_name': 'Oil Change',
+        'interval_mileage': 10000,
+        'interval_months': 6,
+        'last_service_mileage': 140000,
+        'last_service_date': now.subtract(const Duration(days: 90)).toIso8601String(),
+        'next_predicted_date': now.add(const Duration(days: 90)).toIso8601String(),
+        'next_predicted_mileage': 150000,
+      },
+      {
+        'uuid': '${vehicleUuid}_spark',
+        'vehicle_uuid': vehicleUuid,
+        'service_name': 'Spark Plugs',
+        'interval_mileage': 40000,
+        'interval_months': 24,
+        'last_service_mileage': 120000,
+        'last_service_date': now.subtract(const Duration(days: 360)).toIso8601String(),
+        'next_predicted_date': now.add(const Duration(days: 360)).toIso8601String(),
+        'next_predicted_mileage': 160000,
+      },
+      {
+        'uuid': '${vehicleUuid}_brake_fluid',
+        'vehicle_uuid': vehicleUuid,
+        'service_name': 'Brake Fluid',
+        'interval_mileage': 40000,
+        'interval_months': 24,
+        'last_service_mileage': 130000,
+        'last_service_date': now.subtract(const Duration(days: 180)).toIso8601String(),
+        'next_predicted_date': now.add(const Duration(days: 540)).toIso8601String(),
+        'next_predicted_mileage': 170000,
+      },
+      {
+        'uuid': '${vehicleUuid}_coolant',
+        'vehicle_uuid': vehicleUuid,
+        'service_name': 'Coolant',
+        'interval_mileage': 60000,
+        'interval_months': 36,
+        'last_service_mileage': 100000,
+        'last_service_date': now.subtract(const Duration(days: 720)).toIso8601String(),
+        'next_predicted_date': now.add(const Duration(days: 360)).toIso8601String(),
+        'next_predicted_mileage': 160000,
+      },
     ];
+  }
+
+  // --- CRUD Methods ---
+  static Future<int> insertScan(Map<String, dynamic> scan) async {
+    final db = await database;
+    return await db.insert('obd_scans', scan, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<List<Map<String, dynamic>>> getScans(String vehicleUuid) async {
+    final db = await database;
+    return await db.query('obd_scans', where: 'vehicle_uuid = ?', whereArgs: [vehicleUuid], orderBy: 'scan_date DESC');
+  }
+
+  static Future<int> updateVehicleMileage(String vehicleUuid, int mileage) async {
+    final db = await database;
+    return await db.update('vehicles', {'current_mileage': mileage, 'updated_at': DateTime.now().toIso8601String()}, where: 'uuid = ?', whereArgs: [vehicleUuid]);
+  }
+
+  static Future<List<Map<String, dynamic>>> getSchedules(String vehicleUuid) async {
+    final db = await database;
+    return await db.query('service_schedules', where: 'vehicle_uuid = ?', whereArgs: [vehicleUuid]);
+  }
+
+  static Future<int> insertOrUpdateSchedule(Map<String, dynamic> schedule) async {
+    final db = await database;
+    return await db.insert('service_schedules', schedule, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 }
