@@ -38,6 +38,9 @@ jobs:
     - name: Get Dependencies
       run: flutter pub get
 
+    - name: Generate Launcher Icons
+      run: flutter pub run flutter_launcher_icons
+
     - name: Analyze Code
       run: flutter analyze --no-fatal-infos
       continue-on-error: true
