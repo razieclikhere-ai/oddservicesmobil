@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'features/dashboard/presentation/dashboard_screen.dart';
 import 'features/chatbot/presentation/chatbot_screen.dart';
+import 'features/inspection/presentation/inspection_checklist_screen.dart';
 import 'core/theme/app_theme.dart';
 
 void main() async {
@@ -38,6 +39,11 @@ final _router = GoRouter(
       path: '/chatbot',
       name: 'chatbot',
       builder: (context, state) => const ChatbotScreen(),
+    ),
+    GoRoute(
+      path: '/inspection',
+      name: 'inspection',
+      builder: (context, state) => const InspectionChecklistScreen(),
     ),
     GoRoute(
       path: '/vehicles',

@@ -145,6 +145,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
               _buildSectionTitle('AI Diagnostics & Alerts'),
               const SizedBox(height: 12),
               _buildAIAlerts(),
+              const SizedBox(height: 24),
+              _buildSectionTitle('Inspeksi Kendaraan'),
+              const SizedBox(height: 12),
+              _buildInspectionBanner(),
               const SizedBox(height: 16),
             ],
           ),
@@ -414,5 +418,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     ).animate().fadeIn(delay: 200.ms);
+  }
+
+  Widget _buildInspectionBanner() {
+    return GestureDetector(
+      onTap: () => context.push('/inspection'),
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [AppTheme.neonCyan.withOpacity(0.12), AppTheme.neonGreen.withOpacity(0.05)],
+            begin: Alignment.centerLeft,
+            end: Alignment.centerRight,
+          ),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: AppTheme.neonCyan.withOpacity(0.25)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.neonCyan.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(Icons.checklist_rounded, color: AppTheme.neonCyan, size: 26),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Mulai Inspeksi Kendaraan',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                  const SizedBox(height: 4),
+                  Text('23 poin pemeriksaan • Dianalisis AI',
+                      style: TextStyle(color: Colors.grey[400], fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: AppTheme.neonCyan, size: 16),
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: 300.ms).slideX(begin: 0.05);
   }
 }
