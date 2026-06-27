@@ -68,18 +68,20 @@ class ObdBluetoothService {
 
     try {
       // 1. Try bonded (paired) devices first
-      List<BluetoothDevice> bonded = await _flutterBlueClassic.bondedDevices;
+      List<BluetoothDevice>? bonded = await _flutterBlueClassic.bondedDevices;
       BluetoothDevice? targetDevice;
 
-      for (var device in bonded) {
-        final name = (device.name ?? device.address).toLowerCase();
-        if (name.contains('obd') ||
-            name.contains('elm327') ||
-            name.contains('v-link') ||
-            name.contains('diagnose') ||
-            name.contains('link')) {
-          targetDevice = device;
-          break;
+      if (bonded != null) {
+        for (var device in bonded) {
+          final name = (device.name ?? device.address).toLowerCase();
+          if (name.contains('obd') ||
+              name.contains('elm327') ||
+              name.contains('v-link') ||
+              name.contains('diagnose') ||
+              name.contains('link')) {
+            targetDevice = device;
+            break;
+          }
         }
       }
 
@@ -89,7 +91,7 @@ class ObdBluetoothService {
       }
 
       // 2. If not found in bonded, scan for devices
-      await _flutterBlueClassic.startScan();
+      _flutterBlueClassic.startScan();
       _scanSubscription = _flutterBlueClassic.scanResults.listen((device) async {
         final name = (device.name ?? device.address).toLowerCase();
         if (name.contains('obd') ||
@@ -97,7 +99,7 @@ class ObdBluetoothService {
             name.contains('v-link') ||
             name.contains('diagnose')) {
           _scanSubscription?.cancel();
-          await _flutterBlueClassic.stopScan();
+          _flutterBlueClassic.stopScan();
           await _connectToDevice(device);
         }
       });
@@ -105,7 +107,7 @@ class ObdBluetoothService {
       // Auto-fallback if scanning takes too long (12 seconds)
       await Future.delayed(const Duration(seconds: 12));
       if (_currentState == ObdConnectionState.scanning) {
-        await _flutterBlueClassic.stopScan();
+        _flutterBlueClassic.stopScan();
         startSimulationMode();
       }
     } catch (e) {
@@ -175,6 +177,8 @@ class ObdBluetoothService {
   final StringBuffer _rxBuffer = StringBuffer();
 
   void _startLiveDataReader() {
+    if (_connection == null) return;
+
     // 1. Listen for serial responses from ELM327
     _dataSubscription = _connection!.input.listen((data) {
       final chunk = ascii.decode(data);

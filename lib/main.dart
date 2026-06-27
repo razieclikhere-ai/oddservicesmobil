@@ -75,27 +75,27 @@ final _router = GoRouter(
     GoRoute(
       path: '/obd-scanner',
       name: 'obd-scanner',
-      builder: (context, state) => _PlaceholderScreen('OBD Scanner'),
+      builder: (context, state) => const _PlaceholderScreen('OBD Scanner'),
     ),
     GoRoute(
       path: '/ai-analyzer',
       name: 'ai-analyzer',
-      builder: (context, state) => _PlaceholderScreen('AI Analyzer'),
+      builder: (context, state) => const _PlaceholderScreen('AI Analyzer'),
     ),
     GoRoute(
       path: '/service-schedule',
       name: 'service-schedule',
-      builder: (context, state) => _PlaceholderScreen('Jadwal Servis'),
+      builder: (context, state) => const _PlaceholderScreen('Jadwal Servis'),
     ),
     GoRoute(
       path: '/reports',
       name: 'reports',
-      builder: (context, state) => _PlaceholderScreen('Laporan PDF'),
+      builder: (context, state) => const _PlaceholderScreen('Laporan PDF'),
     ),
     GoRoute(
       path: '/settings',
       name: 'settings',
-      builder: (context, state) => _PlaceholderScreen('Pengaturan'),
+      builder: (context, state) => const _PlaceholderScreen('Pengaturan'),
     ),
   ],
 );

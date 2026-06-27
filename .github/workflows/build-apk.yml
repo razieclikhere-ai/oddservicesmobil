@@ -29,7 +29,9 @@ jobs:
         channel: 'stable'
 
     - name: Recreate Platform Projects
-      run: flutter create . --org com.smart.obd --project-name smart_obd_assistant
+      run: |
+        flutter create . --org com.smart.obd --project-name smart_obd_assistant
+        rm -rf test
 
     - name: Copy AndroidManifest with Bluetooth permissions
       run: cp assets/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml

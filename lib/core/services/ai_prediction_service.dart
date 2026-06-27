@@ -4,7 +4,7 @@ import '../database/app_database.dart';
 import 'notification_service.dart';
 
 class AiPredictionService {
-  static final String _apiKey = const String.fromEnvironment('GROQ_API_KEY', defaultValue: '');
+  static const String _apiKey = String.fromEnvironment('GROQ_API_KEY', defaultValue: '');
   
   static Future<void> predictAndSchedule({
     required String vehicleUuid,
