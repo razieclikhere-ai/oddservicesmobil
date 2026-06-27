@@ -55,7 +55,7 @@ final _router = GoRouter(
     GoRoute(
       path: '/dashboard',
       name: 'dashboard',
-      builder: (context, state) => const DashboardScreen(),
+      builder: (context, state) => const HomeShell(),
     ),
     GoRoute(
       path: '/chatbot',
