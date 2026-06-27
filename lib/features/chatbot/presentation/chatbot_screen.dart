@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:dio/dio.dart';
@@ -12,27 +11,28 @@ class ChatMessage {
   ChatMessage({required this.text, required this.isUser, required this.time});
 }
 
-class ChatbotScreen extends ConsumerStatefulWidget {
+class ChatbotScreen extends StatefulWidget {
   const ChatbotScreen({Key? key}) : super(key: key);
 
   @override
-  ConsumerState<ChatbotScreen> createState() => _ChatbotScreenState();
+  State<ChatbotScreen> createState() => _ChatbotScreenState();
 }
 
-class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
+class _ChatbotScreenState extends State<ChatbotScreen> {
   final TextEditingController _controller = TextEditingController();
+  final ScrollController _scrollController = ScrollController();
   final List<ChatMessage> _messages = [];
   bool _isLoading = false;
-  
-  // Groq API setup
-  final String _apiKey = 'YOUR_GROQ_API_KEY_HERE';
+
+  // ⚠️ Ganti dengan API Key Groq Anda dari https://console.groq.com
+  final String _apiKey = const String.fromEnvironment('GROQ_API_KEY', defaultValue: '');
   late final Dio _dio;
-  
-  // Chat history for context
+
   final List<Map<String, dynamic>> _chatHistory = [
     {
-      'role': 'system', 
-      'content': 'Kamu adalah asisten mekanik cerdas bernama "Smart OBD AI". Tugasmu adalah membantu pengguna menganalisis kesehatan mobil mereka dan memberikan tips perawatan secara ringkas, profesional, dan bersahabat.'
+      'role': 'system',
+      'content':
+          'Kamu adalah asisten mekanik cerdas bernama "Smart OBD AI" yang membantu pengguna menganalisis kesehatan kendaraan mereka. Berikan jawaban dalam Bahasa Indonesia yang singkat, jelas, dan profesional. Jika ada kode DTC, jelaskan artinya dan berikan estimasi biaya perbaikan.'
     }
   ];
 
@@ -45,91 +45,87 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         'Authorization': 'Bearer $_apiKey',
         'Content-Type': 'application/json',
       },
+      connectTimeout: const Duration(seconds: 15),
+      receiveTimeout: const Duration(seconds: 30),
     ));
-    // Initial welcome message from AI
     _messages.add(ChatMessage(
-      text: 'Halo! Saya Smart OBD AI. Mobil apa yang ingin kita bahas kesehatannya hari ini?',
+      text: 'Halo! Saya Smart OBD AI 🤖\nSaya siap membantu Anda menganalisis kondisi kendaraan. Apa yang ingin Anda tanyakan?',
       isUser: false,
       time: DateTime.now(),
     ));
   }
 
   Future<void> _sendMessage() async {
-    if (_controller.text.trim().isEmpty) return;
-
-    final userMessage = _controller.text.trim();
-    setState(() {
-      _messages.insert(0, ChatMessage(text: userMessage, isUser: true, time: DateTime.now()));
-      _isLoading = true;
-    });
+    if (_controller.text.trim().isEmpty || _isLoading) return;
+    final userText = _controller.text.trim();
     _controller.clear();
 
-    try {
-      // Append context about current vehicle if available
-      final contextMessage = "Konteks saat ini: Kendaraan saya adalah Toyota Avanza 2020. Pertanyaan: $userMessage";
-      _chatHistory.add({'role': 'user', 'content': contextMessage});
-      
-      final response = await _dio.post(
-        '/chat/completions',
-        data: {
-          'model': 'llama3-70b-8192',
-          'messages': _chatHistory,
-          'temperature': 0.5,
-        },
-      );
+    setState(() {
+      _messages.insert(0, ChatMessage(text: userText, isUser: true, time: DateTime.now()));
+      _isLoading = true;
+    });
 
-      if (response.statusCode == 200) {
-        final assistantReply = response.data['choices'][0]['message']['content'] ?? 'Maaf, saya tidak mengerti.';
-        _chatHistory.add({'role': 'assistant', 'content': assistantReply});
-        
-        setState(() {
-          _messages.insert(0, ChatMessage(text: assistantReply, isUser: false, time: DateTime.now()));
-        });
-      } else {
-        throw Exception('Failed to get response');
-      }
-    } catch (e) {
-      _chatHistory.removeLast(); // Remove failed user message from history
-      setState(() {
-        _messages.insert(0, ChatMessage(text: 'Terjadi kesalahan koneksi ke server Groq AI.', isUser: false, time: DateTime.now()));
+    _chatHistory.add({'role': 'user', 'content': userText});
+
+    try {
+      final response = await _dio.post('/chat/completions', data: {
+        'model': 'llama3-70b-8192',
+        'messages': _chatHistory,
+        'temperature': 0.6,
+        'max_tokens': 512,
       });
+
+      final reply = response.data['choices'][0]['message']['content'] as String? ?? 'Maaf, tidak ada respons.';
+      _chatHistory.add({'role': 'assistant', 'content': reply});
+      setState(() => _messages.insert(0, ChatMessage(text: reply, isUser: false, time: DateTime.now())));
+    } on DioException catch (e) {
+      _chatHistory.removeLast();
+      String errMsg = 'Gagal terhubung ke server AI.';
+      if (e.response?.statusCode == 401) errMsg = 'API Key tidak valid. Periksa konfigurasi.';
+      if (e.type == DioExceptionType.connectionTimeout) errMsg = 'Koneksi timeout. Cek koneksi internet.';
+      setState(() => _messages.insert(0, ChatMessage(text: errMsg, isUser: false, time: DateTime.now())));
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      setState(() => _isLoading = false);
     }
   }
+
+  String _timeStr(DateTime t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
       appBar: AppBar(
+        backgroundColor: AppTheme.darkSurface,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Row(
-          mainAxisSize: MainAxisSize.min,
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: AppTheme.neonCyan.withOpacity(0.1),
+                color: AppTheme.neonCyan.withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(FontAwesomeIcons.robot, size: 16, color: AppTheme.neonCyan),
+              child: const Icon(FontAwesomeIcons.robot, size: 14, color: AppTheme.neonCyan),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Smart OBD AI', style: TextStyle(fontSize: 16, color: Colors.white)),
+                const Text('Smart OBD AI', style: TextStyle(fontSize: 15, color: Colors.white, fontWeight: FontWeight.bold)),
                 Row(
                   children: [
                     Container(
-                      width: 8,
-                      height: 8,
+                      width: 7,
+                      height: 7,
                       decoration: const BoxDecoration(color: AppTheme.neonGreen, shape: BoxShape.circle),
                     ),
                     const SizedBox(width: 4),
-                    const Text('Online', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text('Groq • Llama 3', style: TextStyle(fontSize: 10, color: Colors.grey[500])),
                   ],
                 ),
               ],
@@ -141,123 +137,141 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
         children: [
           Expanded(
             child: ListView.builder(
+              controller: _scrollController,
               reverse: true,
-              padding: const EdgeInsets.all(20.0),
-              itemCount: _messages.length,
-              itemBuilder: (context, index) {
-                final message = _messages[index];
-                return _buildChatBubble(message);
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              itemCount: _messages.length + (_isLoading ? 1 : 0),
+              itemBuilder: (context, i) {
+                if (_isLoading && i == 0) return _buildTypingIndicator();
+                final msg = _messages[_isLoading ? i - 1 : i];
+                return _buildBubble(msg);
               },
             ),
           ),
-          if (_isLoading)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('AI sedang menganalisis', style: TextStyle(color: Colors.grey, fontSize: 13)),
-                  const SizedBox(width: 8),
-                  const SizedBox(
-                    width: 12,
-                    height: 12,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.neonCyan),
-                  ),
-                ],
-              ).animate().fade().scale(),
-            ),
           _buildInputBar(),
         ],
       ),
     );
   }
 
-  Widget _buildChatBubble(ChatMessage message) {
+  Widget _buildTypingIndicator() {
     return Align(
-      alignment: message.isUser ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: Alignment.centerLeft,
       child: Container(
-        margin: const EdgeInsets.only(bottom: 16.0),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
-        padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 14.0),
+        margin: const EdgeInsets.only(bottom: 12, right: 80),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: message.isUser ? AppTheme.neonCyan.withOpacity(0.1) : AppTheme.darkSurface,
+          color: AppTheme.darkSurface,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20), topRight: Radius.circular(20), bottomRight: Radius.circular(20),
+          ),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (int i = 0; i < 3; i++)
+              Container(
+                margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
+                width: 7,
+                height: 7,
+                decoration: const BoxDecoration(color: AppTheme.neonCyan, shape: BoxShape.circle),
+              ).animate(onPlay: (c) => c.repeat())
+                  .fadeIn(delay: Duration(milliseconds: i * 150), duration: 300.ms)
+                  .then()
+                  .fadeOut(duration: 300.ms),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBubble(ChatMessage msg) {
+    return Align(
+      alignment: msg.isUser ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: EdgeInsets.only(
+          bottom: 12,
+          left: msg.isUser ? 60 : 0,
+          right: msg.isUser ? 0 : 60,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: msg.isUser ? AppTheme.neonCyan.withOpacity(0.12) : AppTheme.darkSurface,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(20),
             topRight: const Radius.circular(20),
-            bottomLeft: Radius.circular(message.isUser ? 20 : 4),
-            bottomRight: Radius.circular(message.isUser ? 4 : 20),
+            bottomLeft: Radius.circular(msg.isUser ? 20 : 4),
+            bottomRight: Radius.circular(msg.isUser ? 4 : 20),
           ),
           border: Border.all(
-            color: message.isUser ? AppTheme.neonCyan.withOpacity(0.2) : Colors.white.withOpacity(0.04),
+            color: msg.isUser ? AppTheme.neonCyan.withOpacity(0.2) : Colors.white.withOpacity(0.05),
           ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              message.text,
-              style: TextStyle(
-                color: message.isUser ? Colors.white : Colors.grey[200],
-                fontSize: 14.5,
-                height: 1.4,
-              ),
-            ),
-            const SizedBox(height: 6),
+            Text(msg.text,
+                style: TextStyle(
+                    color: msg.isUser ? Colors.white : Colors.grey[200],
+                    fontSize: 14.5,
+                    height: 1.4)),
+            const SizedBox(height: 4),
             Align(
               alignment: Alignment.bottomRight,
-              child: Text(
-                '${message.time.hour.toString().padLeft(2, '0')}:${message.time.minute.toString().padLeft(2, '0')}',
-                style: const TextStyle(fontSize: 10, color: Colors.grey),
-              ),
+              child: Text(_timeStr(msg.time), style: const TextStyle(fontSize: 9, color: Colors.grey)),
             ),
           ],
         ),
       ),
-    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.05, curve: Curves.easeOut);
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: 0.05);
   }
 
   Widget _buildInputBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+      padding: EdgeInsets.fromLTRB(16, 10, 16, MediaQuery.of(context).padding.bottom + 10),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
-        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+        border: Border(top: BorderSide(color: Colors.white.withOpacity(0.06))),
       ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  hintText: 'Tulis pesan atau tanya kerusakan...',
-                  hintStyle: const TextStyle(color: Colors.grey),
-                  filled: true,
-                  fillColor: AppTheme.darkBg,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(28.0),
-                    borderSide: BorderSide.none,
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
-                ),
-                onSubmitted: (_) => _sendMessage(),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _controller,
+              style: const TextStyle(color: Colors.white),
+              maxLines: 3,
+              minLines: 1,
+              decoration: InputDecoration(
+                hintText: 'Tanya soal kode DTC, servis, atau kondisi mobil...',
+                hintStyle: TextStyle(color: Colors.grey[600], fontSize: 13),
+                filled: true,
+                fillColor: AppTheme.darkBg,
+                border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+              ),
+              onSubmitted: (_) => _sendMessage(),
+            ),
+          ),
+          const SizedBox(width: 10),
+          GestureDetector(
+            onTap: _sendMessage,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              padding: const EdgeInsets.all(13),
+              decoration: BoxDecoration(
+                color: _isLoading ? Colors.grey[800] : AppTheme.neonCyan,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                _isLoading ? Icons.hourglass_empty : Icons.send_rounded,
+                color: _isLoading ? Colors.grey : Colors.black,
+                size: 20,
               ),
             ),
-            const SizedBox(width: 12),
-            GestureDetector(
-              onTap: _sendMessage,
-              child: Container(
-                padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(
-                  color: AppTheme.neonCyan,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.send_rounded, color: Colors.black, size: 22),
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

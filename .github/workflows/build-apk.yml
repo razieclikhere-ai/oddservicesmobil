@@ -5,6 +5,9 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+env:
+  GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -22,23 +25,25 @@ jobs:
     - name: Setup Flutter
       uses: subosito/flutter-action@v2
       with:
-        flutter-version: '3.19.0' # Sesuaikan dengan versi yang Anda gunakan
+        flutter-version: '3.22.0'
         channel: 'stable'
 
     - name: Recreate Platform Projects
-      run: flutter create . --org com.smart.obd
+      run: flutter create . --org com.smart.obd --project-name smart_obd_assistant
 
     - name: Get Dependencies
       run: flutter pub get
 
-    - name: Run Build Runner
-      run: flutter pub run build_runner build --delete-conflicting-outputs
+    - name: Analyze Code
+      run: flutter analyze --no-fatal-infos
+      continue-on-error: true
 
     - name: Build APK
-      run: flutter build apk --release
+      run: flutter build apk --release --dart-define=GROQ_API_KEY=${{ secrets.GROQ_API_KEY }}
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
         name: Smart-OBD-Assistant-APK
         path: build/app/outputs/flutter-apk/app-release.apk
+        retention-days: 30
