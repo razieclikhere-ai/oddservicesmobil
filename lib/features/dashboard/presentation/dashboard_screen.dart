@@ -223,9 +223,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Image.asset('assets/images/app_icon.png', width: 28, height: 28,
             errorBuilder: (_, __, ___) => const Icon(Icons.speed, color: AppTheme.neonCyan, size: 24)),
         const SizedBox(width: 10),
-        const Text('SMART OBD',
+        const Text('CHEK MOBILKU',
             style: TextStyle(color: AppTheme.neonCyan, fontSize: 16,
-                fontWeight: FontWeight.bold, letterSpacing: 3)),
+                fontWeight: FontWeight.bold, letterSpacing: 2)),
       ]),
       actions: [
         IconButton(

@@ -34,7 +34,7 @@ class SmartOBDApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'Smart OBD Service Assistant',
+      title: 'Chek Mobilku',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.dark,
@@ -188,12 +188,12 @@ class _SplashScreenState extends State<SplashScreen> {
                 const SizedBox(height: 28),
                 // App name
                 const Text(
-                  'SMART OBD',
+                  'CHEK MOBILKU',
                   style: TextStyle(
                     color: AppTheme.neonCyan,
-                    fontSize: 32,
+                    fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 6,
+                    letterSpacing: 4,
                   ),
                 )
                     .animate()
