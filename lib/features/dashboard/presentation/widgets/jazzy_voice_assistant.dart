@@ -422,4 +422,5 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
         ),
       ],
     );
+  }
 }
