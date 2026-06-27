@@ -180,15 +180,21 @@ class ObdBluetoothService {
     if (_connection == null) return;
 
     // 1. Listen for serial responses from ELM327
-    _dataSubscription = _connection!.input.listen((data) {
-      final chunk = ascii.decode(data);
-      _rxBuffer.write(chunk);
-      if (_rxBuffer.toString().contains('>')) {
-        final response = _rxBuffer.toString().replaceAll('>', '').trim();
-        _parseObdResponse(response);
-        _rxBuffer.clear();
-      }
-    }, onError: (_) => startSimulationMode(), onDone: () => startSimulationMode());
+    final input = _connection!.input;
+    if (input != null) {
+      _dataSubscription = input.listen((data) {
+        final chunk = ascii.decode(data);
+        _rxBuffer.write(chunk);
+        if (_rxBuffer.toString().contains('>')) {
+          final response = _rxBuffer.toString().replaceAll('>', '').trim();
+          _parseObdResponse(response);
+          _rxBuffer.clear();
+        }
+      }, onError: (_) => startSimulationMode(), onDone: () => startSimulationMode());
+    } else {
+      startSimulationMode();
+      return;
+    }
 
     // 2. Send initialization commands
     _sendCmd('ATZ'); // Reset
