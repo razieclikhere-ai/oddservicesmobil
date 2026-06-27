@@ -128,6 +128,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               );
             }),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.neonCyan,
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+                onPressed: () {
+                  Navigator.pop(context);
+                  context.push('/vehicles');
+                },
+                icon: const Icon(Icons.edit_note, size: 18),
+                label: const Text('Kelola Kendaraan', style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
           ],
         ),
       ),

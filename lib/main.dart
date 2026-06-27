@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'features/dashboard/presentation/dashboard_screen.dart';
 import 'features/chatbot/presentation/chatbot_screen.dart';
 import 'features/inspection/presentation/inspection_checklist_screen.dart';
+import 'features/vehicles/presentation/vehicles_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/notification_service.dart';
 import 'core/services/obd_bluetooth_service.dart';
@@ -55,7 +56,7 @@ final _router = GoRouter(
     GoRoute(
       path: '/vehicles',
       name: 'vehicles',
-      builder: (context, state) => _PlaceholderScreen('Manajemen Kendaraan'),
+      builder: (context, state) => const VehiclesScreen(),
     ),
     GoRoute(
       path: '/obd-scanner',

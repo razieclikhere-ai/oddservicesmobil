@@ -164,6 +164,24 @@ class AppDatabase {
     return await db.query('obd_scans', where: 'vehicle_uuid = ?', whereArgs: [vehicleUuid], orderBy: 'scan_date DESC');
   }
 
+  static Future<List<Map<String, dynamic>>> getVehicles() async {
+    final db = await database;
+    return await db.query('vehicles', orderBy: 'created_at DESC');
+  }
+
+  static Future<int> insertVehicle(Map<String, dynamic> vehicle) async {
+    final db = await database;
+    return await db.insert('vehicles', vehicle, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  static Future<int> deleteVehicle(String uuid) async {
+    final db = await database;
+    // Also delete associated schedules and scans (cascade simulates manually just in case)
+    await db.delete('service_schedules', where: 'vehicle_uuid = ?', whereArgs: [uuid]);
+    await db.delete('obd_scans', where: 'vehicle_uuid = ?', whereArgs: [uuid]);
+    return await db.delete('vehicles', where: 'uuid = ?', whereArgs: [uuid]);
+  }
+
   static Future<int> updateVehicleMileage(String vehicleUuid, int mileage) async {
     final db = await database;
     return await db.update('vehicles', {'current_mileage': mileage, 'updated_at': DateTime.now().toIso8601String()}, where: 'uuid = ?', whereArgs: [vehicleUuid]);
