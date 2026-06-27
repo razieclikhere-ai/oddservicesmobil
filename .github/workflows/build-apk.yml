@@ -25,6 +25,9 @@ jobs:
         flutter-version: '3.19.0' # Sesuaikan dengan versi yang Anda gunakan
         channel: 'stable'
 
+    - name: Recreate Platform Projects
+      run: flutter create . --org com.smart.obd
+
     - name: Get Dependencies
       run: flutter pub get
 
