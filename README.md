@@ -37,7 +37,7 @@ A professional-grade multi-platform vehicle diagnostic application featuring an 
 - **Supabase**: Cloud backend for data sync and real-time updates
 
 ### Connectivity
-- **flutter_blue_plus**: Bluetooth LE integration
+- **flutter_blue_classic**: Bluetooth Classic SPP integration for ELM327 adapters
 - **permission_handler**: Runtime permission management
 - **usb_serial**: USB OTG support for ELM327 adapters
 - **dio**: Network communications for cloud services
