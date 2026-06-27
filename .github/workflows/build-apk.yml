@@ -54,6 +54,20 @@ jobs:
       run: |
         echo -e "\next.flutter = [\n    compileSdkVersion: 34,\n    minSdkVersion: 21,\n    targetSdkVersion: 34\n]" >> android/build.gradle
 
+    - name: Patch app-level build.gradle for JVM 17
+      run: |
+        python3 -c "
+        import os
+        path = 'android/app/build.gradle'
+        if os.path.exists(path):
+            f=open(path); c=f.read(); f.close()
+            c = c.replace('sourceCompatibility JavaVersion.VERSION_1_8', 'sourceCompatibility JavaVersion.VERSION_17')
+            c = c.replace('targetCompatibility JavaVersion.VERSION_1_8', 'targetCompatibility JavaVersion.VERSION_17')
+            c = c.replace(\"jvmTarget = '1.8'\", \"jvmTarget = '17'\")
+            c = c.replace('jvmTarget = \"1.8\"', 'jvmTarget = \"17\"')
+            f=open(path, 'w'); f.write(c); f.close()
+        "
+
     - name: Get Dependencies
       run: flutter pub get
 
