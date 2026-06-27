@@ -269,7 +269,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ],
-            ).animate().scale(delay: 200.ms, duration: 600.ms, curve: Curves.outBack),
+            ).animate().scale(delay: 200.ms, duration: 600.ms, curve: Curves.elasticOut),
           ],
         ),
       ),

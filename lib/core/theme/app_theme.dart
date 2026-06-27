@@ -15,15 +15,13 @@ class AppTheme {
       colorScheme: ColorScheme.fromSeed(
         seedColor: const Color(0xFF0091EA),
         brightness: Brightness.light,
-        background: const Color(0xFFF5F7FA),
-        surface: Colors.white,
       ),
       textTheme: const TextTheme(
         headlineMedium: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
         titleLarge: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
         bodyMedium: TextStyle(color: Color(0xFF64748B)),
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         color: Colors.white,
         elevation: 0,
         shape: RoundedRectangleBorder(
@@ -48,24 +46,24 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       colorScheme: const ColorScheme.dark(
-        background: darkBg,
         surface: darkSurface,
         primary: neonCyan,
         secondary: neonOrange,
         tertiary: neonGreen,
       ),
+      scaffoldBackgroundColor: darkBg,
       textTheme: const TextTheme(
         headlineMedium: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         titleLarge: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         bodyMedium: TextStyle(color: Color(0xFF94A3B8)),
       ),
-      cardTheme: CardThemeData(
+      cardTheme: CardTheme(
         color: darkSurface,
         elevation: 8,
-        shadowColor: Colors.black.withOpacity(0.4),
+        shadowColor: Colors.black54,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.white.withOpacity(0.05)),
+          side: const BorderSide(color: Color(0x0DFFFFFF)),
         ),
       ),
       appBarTheme: const AppBarTheme(
