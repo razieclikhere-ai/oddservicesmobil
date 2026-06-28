@@ -57,6 +57,7 @@ dependencies:
 
   # Automotive Icons
   font_awesome_flutter: 10.7.0
+  flutter_tts: ^4.0.2
 
   # Logging
   logger: ^2.4.0

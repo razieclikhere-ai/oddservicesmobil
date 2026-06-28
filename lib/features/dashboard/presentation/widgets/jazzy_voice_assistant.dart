@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/obd_bluetooth_service.dart';
 import '../../../../core/services/ai_prediction_service.dart';
@@ -17,16 +18,51 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
   bool _isOpen = false;
   bool _isListening = false;
   bool _isThinking = false;
-  String _jazzySpeech = "Halo Bos! Ada yang bisa Jazzy bantu soal kondisi Honda Jazz GE8 hari ini?";
-  String _userSpeech = "";
-  final TextEditingController _textController = TextEditingController();
+  bool _isSpeaking = false;
+  String _statusText = "Ketuk untuk Bicara";
+  
+  late FlutterTts _flutterTts;
 
-  final List<String> _quickCommands = [
-    "Bagaimana kondisi mobil?",
-    "Cek tegangan aki",
-    "Berapa suhu radiator?",
-    "Kapan jadwal ganti oli?"
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _initTts();
+  }
+
+  void _initTts() {
+    _flutterTts = FlutterTts();
+    _flutterTts.setLanguage("id-ID");
+    _flutterTts.setSpeechRate(0.55); // Friendly conversational speed
+    _flutterTts.setVolume(1.0);
+    _flutterTts.setPitch(1.0);
+
+    _flutterTts.setStartHandler(() {
+      if (mounted) {
+        setState(() {
+          _isSpeaking = true;
+          _statusText = "Jazzy Berbicara...";
+        });
+      }
+    });
+
+    _flutterTts.setCompletionHandler(() {
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _statusText = "Ketuk untuk Bicara";
+        });
+      }
+    });
+
+    _flutterTts.setErrorHandler((msg) {
+      if (mounted) {
+        setState(() {
+          _isSpeaking = false;
+          _statusText = "Ketuk untuk Bicara";
+        });
+      }
+    });
+  }
 
   void _toggleOpen() {
     setState(() {
@@ -34,16 +70,26 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
       if (!_isOpen) {
         _isListening = false;
         _isThinking = false;
+        _isSpeaking = false;
+        _flutterTts.stop();
+        _statusText = "Ketuk untuk Bicara";
+      } else {
+        // Start listening automatically when opened
+        _startListeningSim();
       }
     });
   }
 
+  Future<void> _speak(String text) async {
+    await _flutterTts.stop();
+    await _flutterTts.speak(text);
+  }
+
   Future<void> _handleCommand(String command) async {
     setState(() {
-      _userSpeech = command;
       _isListening = false;
       _isThinking = true;
-      _jazzySpeech = "...";
+      _statusText = "Jazzy Berpikir...";
     });
 
     final obd = ObdBluetoothService.instance;
@@ -59,23 +105,24 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
     if (mounted) {
       setState(() {
         _isThinking = false;
-        _jazzySpeech = response;
       });
+      // Speak out loud using TTS!
+      _speak(response);
     }
   }
 
   void _startListeningSim() {
-    if (_isListening || _isThinking) return;
+    if (_isListening || _isThinking || _isSpeaking) return;
 
+    _flutterTts.stop();
     setState(() {
       _isListening = true;
-      _userSpeech = "Mendengarkan...";
+      _statusText = "Mendengarkan...";
     });
 
-    // Simulate listening duration (2.5 seconds) then pick a random query or type custom
+    // Simulate listening duration (2.5 seconds) then pick a random query
     Timer(const Duration(milliseconds: 2500), () {
       if (mounted && _isListening) {
-        // Simple voice-to-text simulation logic
         final list = [
           "Bagaimana kondisi mobil?",
           "Cek tegangan aki",
@@ -89,285 +136,106 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
 
   @override
   void dispose() {
-    _textController.dispose();
+    _flutterTts.stop();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final activeColor = _isListening
+        ? AppTheme.neonCyan
+        : _isThinking
+            ? AppTheme.neonOrange
+            : _isSpeaking
+                ? AppTheme.neonGreen
+                : Colors.white24;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // ── Speech bubble popup ───────────────────────────────────────────────
+        // ── Speech visualizer bar (NO CHAT BUBBLE!) ───────────────────────────
         if (_isOpen)
           Container(
-            width: 300,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             margin: const EdgeInsets.only(bottom: 12),
             decoration: BoxDecoration(
               color: AppTheme.darkSurface,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppTheme.neonCyan.withOpacity(0.35)),
+              borderRadius: BorderRadius.circular(30),
+              border: Border.all(color: activeColor.withOpacity(0.35)),
               boxShadow: [
                 BoxShadow(
-                  color: AppTheme.neonCyan.withOpacity(0.15),
+                  color: activeColor.withOpacity(0.15),
                   blurRadius: 16,
                   spreadRadius: 2,
                 )
               ],
             ),
-            child: Column(
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Header
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.02),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                    border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.05))),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.neonCyan.withOpacity(0.1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(FontAwesomeIcons.robot, size: 14, color: AppTheme.neonCyan),
+                // Animated soundwave bars
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: List.generate(8, (index) {
+                    final randomHeight = 8.0 + (index % 3) * 6.0;
+                    final isAnimating = _isListening || _isThinking || _isSpeaking;
+                    return Container(
+                      margin: const EdgeInsets.symmetric(horizontal: 1.5),
+                      width: 3,
+                      height: isAnimating ? randomHeight : 4,
+                      decoration: BoxDecoration(
+                        color: activeColor,
+                        borderRadius: BorderRadius.circular(2),
                       ),
-                      const SizedBox(width: 10),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'JAZZY',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                            Text(
-                              'AI Voice Assistant',
-                              style: TextStyle(color: AppTheme.neonCyan, fontSize: 10, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        constraints: const BoxConstraints(),
-                        padding: EdgeInsets.zero,
-                        icon: const Icon(Icons.close, color: Colors.grey, size: 18),
-                        onPressed: _toggleOpen,
-                      ),
-                    ],
+                    )
+                        .animate(onPlay: (c) => isAnimating ? c.repeat(reverse: true) : c.stop())
+                        .scaleY(
+                          begin: 0.3,
+                          end: 1.5,
+                          delay: Duration(milliseconds: index * 60),
+                          duration: 400.ms,
+                          curve: Curves.easeInOut,
+                        );
+                  }),
+                ),
+                const SizedBox(width: 14),
+                // Status text
+                Text(
+                  _statusText,
+                  style: TextStyle(
+                    color: Colors.white.withOpacity(0.9),
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-
-                // Dialog Content
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (_userSpeech.isNotEmpty) ...[
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            Flexible(
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.neonCyan.withOpacity(0.1),
-                                  borderRadius: const BorderRadius.only(
-                                    topLeft: Radius.circular(12),
-                                    topRight: Radius.circular(12),
-                                    bottomLeft: Radius.circular(12),
-                                  ),
-                                ),
-                                child: Text(
-                                  _userSpeech,
-                                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                      ],
-
-                      // Jazzy Output
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            margin: const EdgeInsets.only(top: 2),
-                            width: 6,
-                            height: 6,
-                            decoration: const BoxDecoration(
-                              color: AppTheme.neonCyan,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _isThinking
-                                ? Row(
-                                    children: List.generate(3, (index) {
-                                      return Container(
-                                        margin: const EdgeInsets.symmetric(horizontal: 2),
-                                        width: 5,
-                                        height: 5,
-                                        decoration: const BoxDecoration(
-                                          color: AppTheme.neonCyan,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      )
-                                          .animate(onPlay: (c) => c.repeat(reverse: true))
-                                          .scaleXY(
-                                            begin: 0.5,
-                                            end: 1.5,
-                                            delay: Duration(milliseconds: index * 150),
-                                            duration: 400.ms,
-                                          );
-                                    }),
-                                  )
-                                : Text(
-                                    _jazzySpeech,
-                                    style: const TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
-                                  )
-                                    .animate(key: ValueKey(_jazzySpeech))
-                                    .fadeIn(duration: 300.ms)
-                                    .slideY(begin: 0.05),
-                          ),
-                        ],
-                      ),
-
-                      // Soundwave Animation during speech / listening
-                      if (_isListening || _isThinking) ...[
-                        const SizedBox(height: 16),
-                        Center(
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: List.generate(15, (index) {
-                              final randomHeight = 8.0 + (index % 4) * 8.0;
-                              return Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                width: 3,
-                                height: _isListening ? randomHeight : 6,
-                                decoration: BoxDecoration(
-                                  color: _isListening ? AppTheme.neonCyan : AppTheme.neonOrange,
-                                  borderRadius: BorderRadius.circular(2),
-                                ),
-                              )
-                                  .animate(onPlay: (c) => _isListening ? c.repeat(reverse: true) : c.stop())
-                                  .scaleY(
-                                    begin: 0.3,
-                                    end: 1.5,
-                                    delay: Duration(milliseconds: index * 40),
-                                    duration: 350.ms,
-                                    curve: Curves.easeInOut,
-                                  );
-                            }),
-                          ),
-                        ),
-                      ],
-
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Pilihan Perintah:',
-                        style: TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 6),
-                      
-                      // Quick command chips
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: _quickCommands.map((cmd) {
-                          return GestureDetector(
-                            onTap: () => _handleCommand(cmd),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.04),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.white.withOpacity(0.08)),
-                              ),
-                              child: Text(
-                                cmd.replaceAll("Bagaimana ", "").replaceAll("Berapa ", "").replaceAll("Kapan ", ""),
-                                style: const TextStyle(color: Colors.white70, fontSize: 10),
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                      
-                      const SizedBox(height: 12),
-                      
-                      // Text input field
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Container(
-                              height: 36,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.04),
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.white.withOpacity(0.08)),
-                              ),
-                              child: TextField(
-                                controller: _textController,
-                                style: const TextStyle(color: Colors.white, fontSize: 12),
-                                decoration: const InputDecoration(
-                                  hintText: 'Tulis pertanyaan...',
-                                  hintStyle: TextStyle(color: Colors.white24, fontSize: 12),
-                                  border: InputBorder.none,
-                                  isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(vertical: 8),
-                                ),
-                                onSubmitted: (val) {
-                                  if (val.trim().isNotEmpty) {
-                                    _handleCommand(val.trim());
-                                    _textController.clear();
-                                  }
-                                },
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          // Mic / Send button
-                          GestureDetector(
-                            onTap: () {
-                              if (_textController.text.trim().isNotEmpty) {
-                                _handleCommand(_textController.text.trim());
-                                _textController.clear();
-                              } else {
-                                _startListeningSim();
-                              }
-                            },
-                            child: Container(
-                              width: 36,
-                              height: 36,
-                              decoration: BoxDecoration(
-                                color: _isListening ? AppTheme.neonOrange : AppTheme.neonCyan,
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Icon(
-                                _textController.text.trim().isNotEmpty ? Icons.send : Icons.mic,
-                                size: 16,
-                                color: Colors.black,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
+                const SizedBox(width: 12),
+                // Interactive Mic Tap trigger
+                GestureDetector(
+                  onTap: () {
+                    if (!_isListening && !_isThinking && !_isSpeaking) {
+                      _startListeningSim();
+                    } else {
+                      _flutterTts.stop();
+                      setState(() {
+                        _isListening = false;
+                        _isThinking = false;
+                        _isSpeaking = false;
+                        _statusText = "Ketuk untuk Bicara";
+                      });
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: activeColor.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      _isSpeaking ? Icons.stop_rounded : Icons.mic,
+                      size: 14,
+                      color: activeColor,
+                    ),
                   ),
                 ),
               ],
