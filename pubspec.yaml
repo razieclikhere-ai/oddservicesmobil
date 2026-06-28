@@ -27,9 +27,8 @@ dependencies:
   flutter_blue_classic: 0.1.0
   permission_handler: ^11.3.1
 
-  # Network & AI (Groq)
+  # Network & AI (Groq) — single HTTP client
   dio: ^5.4.3+1
-  http: ^1.2.1
 
   # Charts
   fl_chart: ^0.68.0
@@ -46,7 +45,6 @@ dependencies:
   intl: ^0.19.0
   uuid: ^4.4.0
   shared_preferences: ^2.2.3
-  connectivity_plus: ^6.0.3
 
   # QR Code
   qr_flutter: ^4.1.0
@@ -55,7 +53,7 @@ dependencies:
   flutter_animate: ^4.5.0
   shimmer: ^3.0.0
 
-  # Automotive Icons
+  # Automotive Icons + TTS
   font_awesome_flutter: 10.7.0
   flutter_tts: ^4.2.5
 
@@ -73,6 +71,17 @@ flutter:
   assets:
     - assets/images/
     - assets/icons/
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
 
 flutter_icons:
   android: true

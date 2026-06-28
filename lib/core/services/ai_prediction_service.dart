@@ -1,20 +1,35 @@
+// ────────────────────────────────────────────────────────────────────────────
+// core/services/ai_prediction_service.dart
+// Singleton Dio · No hardcoded key · Full error logging
+// ────────────────────────────────────────────────────────────────────────────
 import 'dart:convert';
 import 'package:dio/dio.dart';
+import 'package:logger/logger.dart';
 import '../database/app_database.dart';
 import 'notification_service.dart';
 
-class AiPredictionService {
-  static String get _obfuscatedApiKey {
-    const part1 = 'gsk_exMM6y7n';
-    const part2 = 'CJJqt7qh6sjNWGdy';
-    const part3 = 'b3FY8XthZ6rGXnvq3AVXQLSKSCHE';
-    return part1 + part2 + part3;
-  }
+final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 
-  static final String _apiKey = const String.fromEnvironment('GROQ_API_KEY', defaultValue: '').isNotEmpty
-      ? const String.fromEnvironment('GROQ_API_KEY')
-      : _obfuscatedApiKey;
-  
+class AiPredictionService {
+  // ── Singleton Dio instance ──────────────────────────────────────────────────
+  static final Dio _dio = Dio(BaseOptions(
+    baseUrl: 'https://api.groq.com/openai/v1',
+    connectTimeout: const Duration(seconds: 15),
+    receiveTimeout: const Duration(seconds: 30),
+  ));
+
+  // ── API key: ONLY from --dart-define, no hardcoded fallback ────────────────
+  static const String _apiKey =
+      String.fromEnvironment('GROQ_API_KEY', defaultValue: '');
+
+  static Options get _authHeaders => Options(headers: {
+        'Authorization': 'Bearer $_apiKey',
+        'Content-Type': 'application/json',
+      });
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // Predict & Schedule — called after OBD scan
+  // ══════════════════════════════════════════════════════════════════════════
   static Future<void> predictAndSchedule({
     required String vehicleUuid,
     required String vehicleName,
@@ -25,55 +40,42 @@ class AiPredictionService {
     required double fuelTrim,
     required String dtcCodes,
   }) async {
-    final dio = Dio(BaseOptions(
-      baseUrl: 'https://api.groq.com/openai/v1',
-      headers: {
-        'Authorization': 'Bearer $_apiKey',
-        'Content-Type': 'application/json',
-      },
-      connectTimeout: const Duration(seconds: 15),
-      receiveTimeout: const Duration(seconds: 30),
-    ));
+    if (_apiKey.isEmpty) {
+      _log.w('AiPredictionService: GROQ_API_KEY not set – using local fallback');
+      await _localFallbackSchedule(vehicleUuid, currentMileage);
+      return;
+    }
 
-    final systemPrompt = '''
-Kamu adalah sahabat mekanik profesional sekaligus asisten AI cerdas untuk kendaraan pengguna. Tugasmu menganalisis parameter OBD-II kendaraan dan memprediksi jadwal perawatan/servis berikutnya.
+    const systemPrompt = '''
+Kamu adalah sahabat mekanik profesional sekaligus asisten AI cerdas untuk kendaraan pengguna.
+Gunakan prioritas penilaian berikut secara berurutan:
+1. Riwayat penggantian terakhir (tanggal, kilometer, jenis komponen, merek, spesifikasi, umur pakai).
+2. Kilometer tempuh sejak penggantian terakhir.
+3. Lama waktu sejak penggantian terakhir.
+4. Data OBD-II (DTC, suhu mesin, RPM, Fuel Trim, Battery Voltage, coolant temp, engine hours).
+5. Hasil inspeksi fisik pengguna (warna oli, kampas rem, tekanan ban, kebocoran, suara abnormal, getaran).
+6. Pola penggunaan kendaraan (macet, perjalanan pendek, pegunungan, beban berat, kecepatan tinggi, cuaca ekstrem, banjir).
+7. Jadwal perawatan standar pabrikan.
 
-Gunakan prioritas penilaian berikut secara berurutan dalam menentukan kondisi kendaraan dan rekomendasi jadwal perawatan:
-1. Riwayat penggantian terakhir (tanggal, kilometer, jenis komponen, merek, spesifikasi, dan umur pakai komponen tersebut).
-2. Kilometer tempuh yang telah dilalui kendaraan sejak penggantian terakhir.
-3. Lama waktu (hari/bulan) yang telah berlalu sejak penggantian terakhir.
-4. Data OBD-II terbaru (DTC/kode error, suhu mesin/coolant, RPM, Engine Load, Fuel Trim, Battery Voltage, coolant temperature, engine hours jika tersedia, dan parameter relevan lainnya).
-5. Hasil inspeksi fisik pengguna (warna oli, ketebalan kampas rem, tekanan ban, kebocoran cairan, suara abnormal, getaran kasar, kondisi fisik komponen, dll.).
-6. Pola penggunaan kendaraan oleh pengguna (sering macet parah, perjalanan pendek kurang dari 5km, jalanan pegunungan/tanjakan, membawa beban berat, kecepatan tinggi di tol, cuaca ekstrem, sering melewati banjir, dsb.).
-7. Jadwal perawatan standar dari pabrikan kendaraan (misalnya standar servis berkala 10.000 km atau 6 bulan).
-
-Kembalikan respon HANYA dalam format JSON ARRAY yang valid, tanpa teks penjelasan tambahan, pembuka, penutup, atau tanda markdown.
-
-Setiap objek di dalam array harus memiliki properti berikut:
-1. "service_name": Nama komponen/servis (contoh: "Ganti Oli Mesin", "Cek Baterai/Aki", "Pembersihan Filter Udara", "Inspeksi Sistem Rem")
-2. "interval_mileage": Interval kilometer standar untuk servis ini (dalam angka saja)
-3. "interval_months": Interval bulan standar untuk servis ini (dalam angka saja)
-4. "predicted_mileage": Odometer prediksi saat servis ini harus dilakukan (angka saja)
-5. "predicted_days": Estimasi berapa hari dari sekarang servis ini harus dilakukan berdasarkan kondisi sensor saat ini (angka saja)
-6. "reason": Alasan mengapa jadwal ini direkomendasikan dengan gaya bicara yang sangat ramah, hangat, personal, dan penuh perhatian layaknya seorang sahabat dekat yang mengerti kebutuhan mobil mereka (panggil dengan "Bos", "Bro", atau "Om"). Contoh: "Aki mobilmu terdeteksi 11.8V nih Bos, agak lemah. Sebaiknya dicharge atau diganti biar tidak mogok di jalan ya."
-''';
+Kembalikan HANYA JSON ARRAY valid tanpa teks tambahan. Setiap objek:
+{
+  "service_name": string,
+  "interval_mileage": int,
+  "interval_months": int,
+  "predicted_mileage": int,
+  "predicted_days": int,
+  "reason": string (ramah, hangat, panggil "Bos"/"Bro"/"Om", maks 2 kalimat)
+}''';
 
     final userPrompt = '''
-Menganalisis kendaraan: $vehicleName
-Odometer Saat Ini: $currentMileage km
-Data OBD Sensor Terbaru:
-- Suhu Pendingin (Coolant): $coolantTemp °C
-- Tegangan Aki (Voltage): $batteryVoltage V
-- Putaran Mesin (RPM): $rpm RPM
-- Fuel Trim: $fuelTrim %
-- Kode Error (DTC): ${dtcCodes.isEmpty ? "Tidak ada" : dtcCodes}
-
-Berdasarkan parameter di atas, tentukan/prediksikan jadwal servis/perawatan berkala berikutnya yang perlu diperhatikan pengguna.
-''';
+Kendaraan: $vehicleName | Odometer: $currentMileage km
+OBD Data: Coolant ${coolantTemp.toStringAsFixed(1)}°C · Aki ${batteryVoltage.toStringAsFixed(2)}V · RPM ${rpm.toStringAsFixed(0)} · Fuel Trim ${fuelTrim.toStringAsFixed(2)}% · DTC: ${dtcCodes.isEmpty ? "Tidak ada" : dtcCodes}
+Prediksikan jadwal servis berikutnya.''';
 
     try {
-      final response = await dio.post(
+      final resp = await _dio.post(
         '/chat/completions',
+        options: _authHeaders,
         data: {
           'model': 'llama3-70b-8192',
           'messages': [
@@ -84,27 +86,26 @@ Berdasarkan parameter di atas, tentukan/prediksikan jadwal servis/perawatan berk
         },
       );
 
-      final responseText = response.data['choices'][0]['message']['content'] as String;
-      // Parse the JSON array
-      final cleanJson = responseText.replaceAll('```json', '').replaceAll('```', '').trim();
-      final List<dynamic> predictions = jsonDecode(cleanJson);
-
+      final raw = resp.data['choices'][0]['message']['content'] as String;
+      final clean = raw
+          .replaceAll('```json', '')
+          .replaceAll('```', '')
+          .trim();
+      final List<dynamic> predictions = jsonDecode(clean);
       final now = DateTime.now();
 
       for (var i = 0; i < predictions.length; i++) {
-        final pred = predictions[i];
-        final serviceName = pred['service_name'] as String;
-        final intervalMileage = pred['interval_mileage'] as int;
-        final intervalMonths = pred['interval_months'] as int;
-        final nextMil = pred['predicted_mileage'] as int;
-        final days = pred['predicted_days'] as int;
-        final reason = pred['reason'] as String;
-
+        final pred = predictions[i] as Map<String, dynamic>;
+        final serviceName = pred['service_name'] as String? ?? 'Servis Berkala';
+        final intervalMileage = (pred['interval_mileage'] as num?)?.toInt() ?? 10000;
+        final intervalMonths = (pred['interval_months'] as num?)?.toInt() ?? 6;
+        final nextMil = (pred['predicted_mileage'] as num?)?.toInt() ?? (currentMileage + 10000);
+        final days = (pred['predicted_days'] as num?)?.toInt() ?? 180;
+        final reason = pred['reason'] as String? ?? 'Saatnya perawatan berkala, Bos!';
         final nextDate = now.add(Duration(days: days));
 
-        // Save schedule to database
         await AppDatabase.insertOrUpdateSchedule({
-          'uuid': '${vehicleUuid}_${serviceName.toLowerCase().replaceAll(' ', '_')}',
+          'uuid': '${vehicleUuid}_${serviceName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}',
           'vehicle_uuid': vehicleUuid,
           'service_name': serviceName,
           'description': reason,
@@ -117,53 +118,37 @@ Berdasarkan parameter di atas, tentukan/prediksikan jadwal servis/perawatan berk
           'is_enabled': 1,
         });
 
-        // Trigger or schedule notifications
         if (days <= 7) {
-          // Urgent notification
           await NotificationService.showInstantNotification(
             id: i + 100,
             title: '⚠️ Perlu Tindakan Segera: $serviceName',
             body: '$reason (Prediksi: $nextMil km)',
           );
         } else {
-          // Scheduled reminder
-          await NotificationService.scheduleNotification(
-            id: i + 100,
-            title: '📅 Pengingat Perawatan: $serviceName',
-            body: 'Jadwal servis berkala Anda berikutnya untuk $serviceName. Rekomendasi: $reason',
-            scheduledDate: nextDate.subtract(const Duration(days: 3)), // Remind 3 days before
-          );
+          final remindDate = nextDate.subtract(const Duration(days: 3));
+          if (remindDate.isAfter(now)) {
+            await NotificationService.scheduleNotification(
+              id: i + 100,
+              title: '📅 Pengingat Perawatan: $serviceName',
+              body: 'Rekomendasi: $reason',
+              scheduledDate: remindDate,
+            );
+          }
         }
       }
-    } catch (e) {
-      // Fallback local rules prediction if Groq fails or no API Key
-      final now = DateTime.now();
-      
-      // Simple local logic for Oil Change
-      final nextOilDate = now.add(const Duration(days: 180));
-      await AppDatabase.insertOrUpdateSchedule({
-        'uuid': '${vehicleUuid}_oil_change',
-        'vehicle_uuid': vehicleUuid,
-        'service_name': 'Ganti Oli Mesin (Lokal)',
-        'description': 'Prediksi cadangan karena koneksi AI sibuk. Silakan lakukan pemeriksaan berkala rutin.',
-        'interval_mileage': 10000,
-        'interval_months': 6,
-        'last_service_mileage': currentMileage,
-        'last_service_date': now.toIso8601String(),
-        'next_predicted_date': nextOilDate.toIso8601String(),
-        'next_predicted_mileage': currentMileage + 10000,
-        'is_enabled': 1,
-      });
-
-      await NotificationService.scheduleNotification(
-        id: 999,
-        title: '📅 Pengingat Perawatan: Ganti Oli Mesin',
-        body: 'Jadwal servis berkala oli mesin Anda berikutnya.',
-        scheduledDate: nextOilDate.subtract(const Duration(days: 3)),
-      );
+      _log.i('AiPredictionService: ${predictions.length} schedules updated for $vehicleUuid');
+    } on DioException catch (e) {
+      _log.e('AiPredictionService predictAndSchedule DioError: ${e.message}');
+      await _localFallbackSchedule(vehicleUuid, currentMileage);
+    } catch (e, st) {
+      _log.e('AiPredictionService predictAndSchedule error', error: e, stackTrace: st);
+      await _localFallbackSchedule(vehicleUuid, currentMileage);
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Jazzy Chat Response
+  // ══════════════════════════════════════════════════════════════════════════
   static Future<String> getJazzyResponse({
     required String query,
     required double coolantTemp,
@@ -172,42 +157,28 @@ Berdasarkan parameter di atas, tentukan/prediksikan jadwal servis/perawatan berk
     required double speed,
     required String dtcCodes,
   }) async {
-    final dio = Dio(BaseOptions(
-      baseUrl: 'https://api.groq.com/openai/v1',
-      headers: {
-        'Authorization': 'Bearer $_apiKey',
-        'Content-Type': 'application/json',
-      },
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
-    ));
+    if (_apiKey.isEmpty) {
+      return _localJazzyFallback(query, coolantTemp, batteryVoltage, rpm, dtcCodes);
+    }
 
     final systemPrompt = '''
-Kamu adalah Jazzy, sahabat mekanik profesional sekaligus asisten AI cerdas untuk mobil Honda Jazz GE8 milik pengguna.
-Gaya bicaramu sangat hangat, ramah, bersahabat, penuh perhatian, dan empati layaknya sahabat dekat yang sangat mengerti kebutuhan mobil mereka.
-Panggil pengguna dengan sebutan akrab seperti "Bos", "Bro", atau "Om".
-Jawab pertanyaan mereka seolah-olah kamu sedang berbicara langsung secara alami, singkat, padat, dan solutif (maksimal 2 kalimat pendek).
+Kamu adalah Jazzy, sahabat mekanik profesional AI yang hangat, ramah, bersahabat, dan penuh perhatian.
+Panggil pengguna dengan "Bos", "Bro", atau "Om".
+Jawab singkat, padat, solutif (maks 2 kalimat pendek).
 
-Gunakan prioritas penilaian berikut secara berurutan saat memberikan diagnosa atau saran perawatan:
-1. Riwayat penggantian terakhir (tanggal, kilometer, jenis komponen, merek, spesifikasi, dan umur pakai komponen tersebut).
-2. Kilometer tempuh sejak penggantian.
-3. Lama waktu sejak penggantian.
-4. Data OBD-II terbaru (DTC, suhu mesin, RPM, Engine Load, Fuel Trim, Battery Voltage, coolant temperature, engine hours jika ada).
-5. Hasil inspeksi fisik pengguna (warna oli, ketebalan kampas rem, tekanan ban, kebocoran cairan, suara abnormal, getaran kasar, kondisi fisik komponen, dll.).
-6. Pola penggunaan kendaraan (sering macet, perjalanan pendek, jalan pegunungan, membawa beban berat, kecepatan tinggi, cuaca ekstrem, banjir, dll.).
-7. Jadwal perawatan standar dari pabrikan.
-
-Berikut adalah data sensor OBD-II mobil saat ini:
-- RPM: $rpm RPM
-- Suhu Pendingin (Coolant): $coolantTemp °C
-- Tegangan Aki (Voltage): $batteryVoltage V
-- Kecepatan: $speed km/h
-- Kode Error (DTC): ${dtcCodes.isEmpty ? "Tidak ada" : dtcCodes}
-''';
+Prioritas diagnosa:
+1. Riwayat servis terakhir (tanggal, KM, komponen, merek, umur pakai).
+2. KM tempuh sejak penggantian.
+3. Waktu berlalu sejak penggantian.
+4. Data OBD-II: RPM $rpm · Coolant ${coolantTemp.toStringAsFixed(1)}°C · Aki ${batteryVoltage.toStringAsFixed(2)}V · Speed $speed km/h · DTC: ${dtcCodes.isEmpty ? "Tidak ada" : dtcCodes}.
+5. Inspeksi fisik pengguna.
+6. Pola penggunaan kendaraan.
+7. Standar pabrikan.''';
 
     try {
-      final response = await dio.post(
+      final resp = await _dio.post(
         '/chat/completions',
+        options: _authHeaders,
         data: {
           'model': 'llama3-8b-8192',
           'messages': [
@@ -217,26 +188,19 @@ Berikut adalah data sensor OBD-II mobil saat ini:
           'temperature': 0.7,
         },
       );
-
-      return response.data['choices'][0]['message']['content'] as String;
-    } catch (_) {
-      final q = query.toLowerCase();
-      if (q.contains('aki') || q.contains('baterai') || q.contains('volt')) {
-        return 'Tegangan aki Anda saat ini ${batteryVoltage.toStringAsFixed(2)} Volt. Kondisinya ${batteryVoltage < 12.0 ? "lemah, sebaiknya segera dicas atau ganti" : "sangat prima, Bos!"}';
-      }
-      if (q.contains('suhu') || q.contains('panas') || q.contains('coolant') || q.contains('temperatur')) {
-        return 'Suhu pendingin mesin saat ini ${coolantTemp.toStringAsFixed(1)} derajat Celsius. ${coolantTemp > 100 ? "Wah, agak panas nih Bos. Cek air radiator ya!" : "Mesin masih dalam suhu kerja normal."}';
-      }
-      if (q.contains('kondisi') || q.contains('sehat') || q.contains('kerusakan') || q.contains('error') || q.contains('dtc')) {
-        if (dtcCodes.isNotEmpty) {
-          return 'Ada kode error terdeteksi yaitu $dtcCodes. Sebaiknya Anda menanyakan masalah ini ke asisten AI di tab tanya mekanik.';
-        }
-        return 'Semua sensor OBD termonitor normal. RPM stabil di ${rpm.toStringAsFixed(0)} dan tegangan baterai ${batteryVoltage.toStringAsFixed(1)} Volt. Siap gas pol, Bos!';
-      }
-      return 'Halo Bos! Ada yang bisa Jazzy bantu soal kondisi mesin Honda Jazz GE8 Anda hari ini?';
+      return resp.data['choices'][0]['message']['content'] as String;
+    } on DioException catch (e) {
+      _log.w('Jazzy DioError: ${e.message}');
+      return _localJazzyFallback(query, coolantTemp, batteryVoltage, rpm, dtcCodes);
+    } catch (e) {
+      _log.w('Jazzy error: $e');
+      return _localJazzyFallback(query, coolantTemp, batteryVoltage, rpm, dtcCodes);
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  // Analyze Service Log & Schedule Next
+  // ══════════════════════════════════════════════════════════════════════════
   static Future<void> analyzeServiceLogAndSchedule({
     required String vehicleUuid,
     required String serviceType,
@@ -245,43 +209,29 @@ Berikut adalah data sensor OBD-II mobil saat ini:
     required int nextTargetMileage,
     required DateTime serviceDate,
   }) async {
-    final dio = Dio(BaseOptions(
-      baseUrl: 'https://api.groq.com/openai/v1',
-      headers: {
-        'Authorization': 'Bearer $_apiKey',
-        'Content-Type': 'application/json',
-      },
-      connectTimeout: const Duration(seconds: 10),
-      receiveTimeout: const Duration(seconds: 15),
-    ));
+    if (_apiKey.isEmpty) {
+      await _localServiceLogFallback(vehicleUuid, serviceType, oilBrand,
+          currentMileage, nextTargetMileage, serviceDate);
+      return;
+    }
 
     final systemPrompt = '''
-Kamu adalah sahabat mekanik profesional AI. Tugasmu menganalisis catatan servis yang baru dilakukan dan memperkirakan tanggal rekomendasi servis berikutnya.
+Kamu adalah sahabat mekanik profesional AI.
+Analisis catatan servis berikut dan prediksikan tanggal servis berikutnya.
 
-Gunakan prioritas penilaian berikut secara berurutan dalam menentukan kondisi kendaraan dan rekomendasi jadwal perawatan:
-1. Riwayat penggantian terakhir (tanggal, kilometer, jenis komponen, merek, spesifikasi, dan umur pakai komponen tersebut).
-2. Kilometer tempuh yang telah dilalui kendaraan sejak penggantian terakhir.
-3. Lama waktu (hari/bulan) yang telah berlalu sejak penggantian terakhir.
-4. Data OBD-II terbaru (DTC/kode error, suhu mesin/coolant, RPM, Engine Load, Fuel Trim, Battery Voltage, coolant temperature, engine hours jika tersedia, dan parameter relevan lainnya).
-5. Hasil inspeksi fisik pengguna (warna oli, ketebalan kampas rem, tekanan ban, kebocoran cairan, suara abnormal, getaran kasar, kondisi fisik komponen, dll.).
-6. Pola penggunaan kendaraan oleh pengguna (sering macet parah, perjalanan pendek kurang dari 5km, jalanan pegunungan/tanjakan, membawa beban berat, kecepatan tinggi di tol, cuaca ekstrem, sering melewati banjir, dsb.).
-7. Jadwal perawatan standar dari pabrikan kendaraan.
+Data Servis:
+- Tipe: $serviceType
+- Oli/Sparepart: ${oilBrand.isEmpty ? "Tidak ditentukan" : oilBrand}
+- Odometer: $currentMileage km → target ${nextTargetMileage} km
+- Tanggal servis: ${serviceDate.toIso8601String()}
 
-Analisis data berikut:
-- Tipe Servis: $serviceType
-- Merek Oli/Sparepart: ${oilBrand.isEmpty ? "Tidak ditentukan" : oilBrand}
-- Odometer saat Servis: $currentMileage km
-- Target Odometer Servis Berikutnya: $nextTargetMileage km
-- Tanggal Servis: ${serviceDate.toIso8601String()}
-
-Kembalikan hasil dalam format JSON objek dengan properti berikut:
-1. "predicted_days": jumlah hari dari tanggal servis saat ini untuk melakukan servis berikutnya (angka saja, misalnya 180).
-2. "recommendation": rekomendasi hangat dan ramah layaknya sahabat (maksimal 2 kalimat, panggil pengguna dengan "Bos", "Bro", atau "Om").
-''';
+Kembalikan JSON objek:
+{"predicted_days": int, "recommendation": string (hangat, maks 2 kalimat, panggil "Bos"/"Bro"/"Om")}''';
 
     try {
-      final response = await dio.post(
+      final resp = await _dio.post(
         '/chat/completions',
+        options: _authHeaders,
         data: {
           'model': 'llama3-8b-8192',
           'messages': [
@@ -293,61 +243,117 @@ Kembalikan hasil dalam format JSON objek dengan properti berikut:
         },
       );
 
-      final cleanJson = response.data['choices'][0]['message']['content'] as String;
-      final Map<String, dynamic> result = jsonDecode(cleanJson);
-      final int days = result['predicted_days'] as int? ?? 180;
-      final String recommendation = result['recommendation'] as String? ?? 'Waktunya melakukan perawatan berkala, Bos!';
+      final Map<String, dynamic> result =
+          jsonDecode(resp.data['choices'][0]['message']['content'] as String);
+      final int days = (result['predicted_days'] as num?)?.toInt() ?? 180;
+      final String rec = result['recommendation'] as String? ??
+          'Waktunya perawatan berkala, Bos!';
+      await _saveScheduleFromLog(vehicleUuid, serviceType, oilBrand,
+          currentMileage, nextTargetMileage, serviceDate, days, rec);
+      _log.i('AiPredictionService: schedule saved for $serviceType');
+    } on DioException catch (e) {
+      _log.w('analyzeServiceLog DioError: ${e.message}');
+      await _localServiceLogFallback(vehicleUuid, serviceType, oilBrand,
+          currentMileage, nextTargetMileage, serviceDate);
+    } catch (e, st) {
+      _log.e('analyzeServiceLog error', error: e, stackTrace: st);
+      await _localServiceLogFallback(vehicleUuid, serviceType, oilBrand,
+          currentMileage, nextTargetMileage, serviceDate);
+    }
+  }
 
-      final nextDate = serviceDate.add(Duration(days: days));
+  // ── Private helpers ─────────────────────────────────────────────────────────
 
-      // Update service schedule in database
-      await AppDatabase.insertOrUpdateSchedule({
-        'uuid': '${vehicleUuid}_${serviceType.toLowerCase().replaceAll(' ', '_')}',
-        'vehicle_uuid': vehicleUuid,
-        'service_name': serviceType,
-        'description': '$recommendation (Oli: $oilBrand)',
-        'interval_mileage': nextTargetMileage - currentMileage,
-        'interval_months': (days / 30).round(),
-        'last_service_mileage': currentMileage,
-        'last_service_date': serviceDate.toIso8601String(),
-        'next_predicted_date': nextDate.toIso8601String(),
-        'next_predicted_mileage': nextTargetMileage,
-        'is_enabled': 1,
-      });
+  static Future<void> _saveScheduleFromLog(
+    String vehicleUuid,
+    String serviceType,
+    String oilBrand,
+    int currentMileage,
+    int nextTargetMileage,
+    DateTime serviceDate,
+    int days,
+    String recommendation,
+  ) async {
+    final nextDate = serviceDate.add(Duration(days: days));
+    final key = '${vehicleUuid}_${serviceType.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '_')}';
 
-      // Schedule notification
+    await AppDatabase.insertOrUpdateSchedule({
+      'uuid': key,
+      'vehicle_uuid': vehicleUuid,
+      'service_name': serviceType,
+      'description': '$recommendation${oilBrand.isNotEmpty ? " · Oli: $oilBrand" : ""}',
+      'interval_mileage': nextTargetMileage - currentMileage,
+      'interval_months': (days / 30).round(),
+      'last_service_mileage': currentMileage,
+      'last_service_date': serviceDate.toIso8601String(),
+      'next_predicted_date': nextDate.toIso8601String(),
+      'next_predicted_mileage': nextTargetMileage,
+      'is_enabled': 1,
+    });
+
+    final remindDate = nextDate.subtract(const Duration(days: 3));
+    if (remindDate.isAfter(DateTime.now())) {
       await NotificationService.scheduleNotification(
-        id: serviceType.hashCode,
+        id: serviceType.hashCode.abs(),
         title: '📅 Jadwal Servis: $serviceType',
         body: '$recommendation Target Odo: $nextTargetMileage km.',
-        scheduledDate: nextDate.subtract(const Duration(days: 3)),
-      );
-    } catch (_) {
-      // Local fallback prediction if Groq fails
-      final int defaultDays = serviceType.toLowerCase().contains('oli') ? 180 : 360;
-      final nextDate = serviceDate.add(Duration(days: defaultDays));
-      final rec = 'Prediksi lokal: Perawatan berkala untuk $serviceType berikutnya direkomendasikan dalam $defaultDays hari.';
-
-      await AppDatabase.insertOrUpdateSchedule({
-        'uuid': '${vehicleUuid}_${serviceType.toLowerCase().replaceAll(' ', '_')}',
-        'vehicle_uuid': vehicleUuid,
-        'service_name': serviceType,
-        'description': '$rec (Oli: $oilBrand)',
-        'interval_mileage': nextTargetMileage - currentMileage,
-        'interval_months': (defaultDays / 30).round(),
-        'last_service_mileage': currentMileage,
-        'last_service_date': serviceDate.toIso8601String(),
-        'next_predicted_date': nextDate.toIso8601String(),
-        'next_predicted_mileage': nextTargetMileage,
-        'is_enabled': 1,
-      });
-
-      await NotificationService.scheduleNotification(
-        id: serviceType.hashCode,
-        title: '📅 Pengingat Servis: $serviceType',
-        body: 'Jangan lupa untuk melakukan servis $serviceType di $nextTargetMileage km.',
-        scheduledDate: nextDate.subtract(const Duration(days: 3)),
+        scheduledDate: remindDate,
       );
     }
+  }
+
+  static Future<void> _localFallbackSchedule(
+      String vehicleUuid, int currentMileage) async {
+    final now = DateTime.now();
+    final nextOilDate = now.add(const Duration(days: 180));
+    await AppDatabase.insertOrUpdateSchedule({
+      'uuid': '${vehicleUuid}_ganti_oli_mesin',
+      'vehicle_uuid': vehicleUuid,
+      'service_name': 'Ganti Oli Mesin',
+      'description': 'Prediksi lokal: Jadwal servis berkala direkomendasikan dalam 6 bulan atau 10.000 km.',
+      'interval_mileage': 10000,
+      'interval_months': 6,
+      'last_service_mileage': currentMileage,
+      'last_service_date': now.toIso8601String(),
+      'next_predicted_date': nextOilDate.toIso8601String(),
+      'next_predicted_mileage': currentMileage + 10000,
+      'is_enabled': 1,
+    });
+  }
+
+  static Future<void> _localServiceLogFallback(
+    String vehicleUuid,
+    String serviceType,
+    String oilBrand,
+    int currentMileage,
+    int nextTargetMileage,
+    DateTime serviceDate,
+  ) async {
+    final defaultDays =
+        serviceType.toLowerCase().contains('oli') ? 180 : 360;
+    final rec =
+        'Perawatan berkala untuk $serviceType berikutnya direkomendasikan dalam $defaultDays hari, Bos!';
+    await _saveScheduleFromLog(vehicleUuid, serviceType, oilBrand,
+        currentMileage, nextTargetMileage, serviceDate, defaultDays, rec);
+  }
+
+  static String _localJazzyFallback(String query, double coolantTemp,
+      double batteryVoltage, double rpm, String dtcCodes) {
+    final q = query.toLowerCase();
+    if (q.contains('aki') || q.contains('baterai') || q.contains('volt')) {
+      return 'Tegangan aki Anda saat ini ${batteryVoltage.toStringAsFixed(2)} V. '
+          '${batteryVoltage < 12.0 ? "Sebaiknya segera dicas atau ganti ya, Bos!" : "Kondisinya masih prima, Bos!"}';
+    }
+    if (q.contains('suhu') || q.contains('panas') || q.contains('coolant')) {
+      return 'Suhu pendingin mesin ${coolantTemp.toStringAsFixed(1)}°C. '
+          '${coolantTemp > 100 ? "Wah agak panas nih Bos, cek air radiator ya!" : "Masih dalam batas normal kok, Bro!"}';
+    }
+    if (q.contains('kondisi') || q.contains('sehat') || q.contains('dtc') || q.contains('error')) {
+      if (dtcCodes.isNotEmpty) {
+        return 'Ada kode error terdeteksi: $dtcCodes. Sebaiknya segera dicek ke bengkel ya, Bos!';
+      }
+      return 'Semua sensor OBD normal. RPM stabil ${rpm.toStringAsFixed(0)} dan aki ${batteryVoltage.toStringAsFixed(1)}V. Siap gas pol, Bos! 🚗';
+    }
+    return 'Halo Bos! Ada yang bisa Jazzy bantu soal kondisi kendaraan Anda hari ini? 😊';
   }
 }
