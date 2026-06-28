@@ -57,6 +57,7 @@ class ObdBluetoothService {
   double fuelTrim       = 0.0;
   String dtcCodes       = '';
   int    currentOdometer = 0;
+  double _accumulatedKm  = 0.0; // Track fractional kilometers
 
   // ── Public API ────────────────────────────────────────────────────────────
 
@@ -344,6 +345,17 @@ class ObdBluetoothService {
         final idxSpeed = clean.indexOf('410D');
         if (idxSpeed != -1 && clean.length >= idxSpeed + 6) {
           speed = int.parse(clean.substring(idxSpeed + 4, idxSpeed + 6), radix: 16).toDouble();
+          
+          // Accumulate distance (2 seconds polling interval = 2 / 3600 hours)
+          if (speed > 0) {
+            _accumulatedKm += speed * (2.0 / 3600.0);
+            if (_accumulatedKm >= 1.0) {
+              final wholeKms = _accumulatedKm.floor();
+              currentOdometer += wholeKms;
+              _accumulatedKm -= wholeKms;
+              AppDatabase.updateVehicleMileage(activeVehicleUuid, currentOdometer);
+            }
+          }
         }
 
         final idxCoolant = clean.indexOf('4105');
