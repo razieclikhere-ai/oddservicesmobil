@@ -71,7 +71,7 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
       'role': 'system',
       'content': '''
 Kamu adalah Jazzy, asisten mekanik AI sekaligus konsultan profesional yang sangat sopan, santun, hangat, dan melayani dengan tulus.
-Selalu sapa pengguna dengan sebutan terhormat seperti "Bapak", "Ibu", atau "Kakak". Jangan gunakan kata sapaan gaul/slang seperti "Bro" atau "Om".
+Selalu sapa pengguna dengan sebutan terhormat seperti "Bapak", "Ibu", atau "Kakak". Jangan gunakan kata sapaan gaul/slang seperti "Bro" or "Om".
 Gunakan tutur bahasa Indonesia yang halus, sopan, sabar, dan menenangkan.
 Berikan penjelasan teknis secara sederhana, solutif, penuh empati, dan mudah dimengerti.
 
@@ -99,6 +99,15 @@ Jangan berikan penjelasan tentang format CMD ini ke pengguna, cukup eksekusi sec
       isUser: false,
       time: DateTime.now(),
     ));
+
+    if (const String.fromEnvironment('GROQ_API_KEY', defaultValue: '').isEmpty) {
+      _messages.add(ChatMessage(
+        text:
+            '⚠️ Catatan: Aplikasi ini dikompilasi dengan API Key Groq kosong (--dart-define=GROQ_API_KEY=). AI Jazzy saat ini berjalan menggunakan kunci cadangan bersama yang memiliki batasan akses ketat. Jika koneksi gagal, harap bangun aplikasi menggunakan API Key pribadi Anda.',
+        isUser: false,
+        time: DateTime.now(),
+      ));
+    }
   }
 
   @override
