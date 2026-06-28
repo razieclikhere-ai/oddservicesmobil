@@ -112,6 +112,8 @@ class _ScanHistoryPageState extends ConsumerState<ScanHistoryPage> {
                     final isError =
                         (scan['dtc_codes'] as String? ?? '').isNotEmpty;
 
+                    final scanUuid = scan['uuid'] as String? ?? '';
+
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
@@ -135,26 +137,39 @@ class _ScanHistoryPageState extends ConsumerState<ScanHistoryPage> {
                                       color: AppTheme.neonCyan,
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold)),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: (isError
-                                          ? AppTheme.neonOrange
-                                          : AppTheme.neonGreen)
-                                      .withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  isError ? 'Ada Error' : 'Sehat',
-                                  style: TextStyle(
-                                    color: isError
-                                        ? AppTheme.neonOrange
-                                        : AppTheme.neonGreen,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: (isError
+                                              ? AppTheme.neonOrange
+                                              : AppTheme.neonGreen)
+                                          .withOpacity(0.12),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      isError ? 'Ada Error' : 'Sehat',
+                                      style: TextStyle(
+                                        color: isError
+                                            ? AppTheme.neonOrange
+                                            : AppTheme.neonGreen,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
                                   ),
-                                ),
+                                  const SizedBox(width: 10),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline,
+                                        color: AppTheme.neonOrange, size: 18),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: () => _deleteSingleScan(scanUuid),
+                                    tooltip: 'Hapus data scan ini',
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -240,6 +255,38 @@ class _ScanHistoryPageState extends ConsumerState<ScanHistoryPage> {
                 color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
       ],
     );
+  }
+
+  Future<void> _deleteSingleScan(String scanUuid) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        title: const Text('Hapus Catatan Scan?',
+            style: TextStyle(color: Colors.white)),
+        content: const Text(
+            'Catatan scan OBD ini akan dihapus secara permanen dari riwayat.',
+            style: TextStyle(color: Colors.white70)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Batal', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.neonOrange),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Hapus',
+                style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await AppDatabase.deleteScan(scanUuid);
+      ref.invalidate(scanHistoryProvider);
+      ref.invalidate(recentScansProvider);
+    }
   }
 
   Future<void> _clearHistory(String vehicleUuid) async {

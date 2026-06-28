@@ -300,6 +300,16 @@ class AppDatabase {
     }
   }
 
+  static Future<int> deleteScan(String uuid) async {
+    try {
+      final db = await database;
+      return await db.delete('obd_scans', where: 'uuid = ?', whereArgs: [uuid]);
+    } catch (e, st) {
+      _log.e('DB deleteScan', error: e, stackTrace: st);
+      return 0;
+    }
+  }
+
   // ── Vehicles ──────────────────────────────────────────────────────────────
 
   static Future<List<Map<String, dynamic>>> getVehicles() async {
