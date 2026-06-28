@@ -60,9 +60,26 @@ jobs:
             print("build.gradle patched")
         PYEOF
 
-    # ── Fix 2: Force compileSdk 36 in app/build.gradle ─────────────────────────
+    # ── Fix 2: Inject ext.flutter into android/build.gradle ───────────────────
+    # flutter_blue_classic uses `flutter.compileSdkVersion` from the root project.
+    # We must provide ext.flutter so all plugin subprojects can resolve it.
+    - name: Inject ext.flutter into android/build.gradle
+      run: |
+        cat >> android/build.gradle << 'GROOVY'
+
+        // Provide flutter SDK version constants for plugins like flutter_blue_classic
+        ext.flutter = [
+            compileSdkVersion: 36,
+            minSdkVersion    : 21,
+            targetSdkVersion : 34
+        ]
+        GROOVY
+        echo "android/build.gradle after injection (last 20 lines):"
+        tail -20 android/build.gradle
+
+    # ── Fix 3: Force compileSdk 36 in app/build.gradle ─────────────────────────
     # Flutter 3.24 uses `flutter.compileSdkVersion` (a variable), not a literal.
-    # We append an android{} override block that wins over the flutter variable.
+    # Replace variable reference AND any literal values.
     - name: Force compileSdk = 36 in app/build.gradle
       run: |
         python3 - <<'PYEOF'
