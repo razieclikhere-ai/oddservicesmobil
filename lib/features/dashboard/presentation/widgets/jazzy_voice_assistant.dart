@@ -38,12 +38,34 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
     _initSpeech();
   }
 
-  void _initTts() {
+  void _initTts() async {
     _flutterTts = FlutterTts();
-    _flutterTts.setLanguage("id-ID");
-    _flutterTts.setSpeechRate(0.48); // Natural conversational speed
-    _flutterTts.setVolume(1.0);
-    _flutterTts.setPitch(0.95); // Friendly female pitch adjustment
+    await _flutterTts.setLanguage("id-ID");
+    await _flutterTts.setSpeechRate(0.48); // Natural conversational speed
+    await _flutterTts.setVolume(1.0);
+    await _flutterTts.setPitch(0.95); // Friendly female pitch adjustment
+
+    try {
+      final voices = await _flutterTts.getVoices();
+      String? bestVoice;
+      for (final v in voices) {
+        final String name = (v['name'] as String? ?? '').toLowerCase();
+        final String locale = (v['locale'] as String? ?? '').toLowerCase();
+        if (locale.contains('id')) {
+          // Prefer network-based high-quality neural voices
+          if (name.contains('network') || name.contains('idc') || name.contains('knd')) {
+            bestVoice = v['name'] as String;
+            break;
+          }
+        }
+      }
+      if (bestVoice != null) {
+        await _flutterTts.setVoice({"name": bestVoice, "locale": "id-ID"});
+        _log.d("Jazzy: Selected neural voice: $bestVoice");
+      }
+    } catch (e) {
+      _log.w("Jazzy: Error setting neural voice: $e");
+    }
 
     _flutterTts.setStartHandler(() {
       if (mounted) {
