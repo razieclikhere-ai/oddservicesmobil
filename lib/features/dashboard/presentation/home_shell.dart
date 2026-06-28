@@ -21,8 +21,6 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> {
-  int _navIndex = 0;
-
   static const _pages = [
     DashboardScreen(),
     ObdLivePage(),
@@ -39,11 +37,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
 
   @override
   Widget build(BuildContext context) {
+    final navIndex = ref.watch(dashboardTabIndexProvider);
+
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
       body: Stack(
         children: [
-          IndexedStack(index: _navIndex, children: _pages),
+          IndexedStack(index: navIndex, children: _pages),
           const Positioned(
             bottom: 16,
             right: 16,
@@ -52,9 +52,9 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         ],
       ),
       bottomNavigationBar: _BottomNav(
-        currentIndex: _navIndex,
+        currentIndex: navIndex,
         items: _navItems,
-        onTap: (i) => setState(() => _navIndex = i),
+        onTap: (i) => ref.read(dashboardTabIndexProvider.notifier).state = i,
       ),
     );
   }

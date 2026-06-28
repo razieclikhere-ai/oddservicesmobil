@@ -161,10 +161,20 @@ Prediksikan jadwal servis berikutnya.''';
       return _localJazzyFallback(query, coolantTemp, batteryVoltage, rpm, dtcCodes);
     }
 
+    // Load active vehicle specifications dynamically
+    final vehicleUuid = ObdBluetoothService.instance.activeVehicleUuid;
+    final vehicle = await AppDatabase.getVehicle(vehicleUuid);
+    final specs = vehicle != null
+        ? '${vehicle['brand']} ${vehicle['model']} (${vehicle['year']}, ${vehicle['engine_type']}, ${vehicle['fuel_type']}, ${vehicle['transmission_type']})'
+        : 'Honda Jazz GE8 2012';
+
     final systemPrompt = '''
 Kamu adalah Jazzy, sahabat mekanik profesional AI yang hangat, ramah, bersahabat, dan penuh perhatian.
 Panggil pengguna dengan "Bos", "Bro", atau "Om".
-Jawab singkat, padat, solutif (maks 2 kalimat pendek).
+Jawab singkat, padat, solutif (maks 2-3 kalimat pendek).
+
+Kendaraan Aktif Pengguna: $specs.
+Sesuaikan analisis kerusakan OBD-II, kode DTC, suhu, dan rekomendasi secara spesifik berdasarkan tipe kendaraan tersebut!
 
 Prioritas diagnosa:
 1. Riwayat servis terakhir (tanggal, KM, komponen, merek, umur pakai).

@@ -95,3 +95,22 @@ final obdConnectionStateProvider =
     StreamProvider<ObdConnectionState>((ref) {
   return ObdBluetoothService.instance.connectionStateStream;
 });
+
+// ── Inspection problems count for active vehicle ─────────────────────────────
+final inspectionProblemsCountProvider =
+    FutureProvider<int>((ref) async {
+  final uuid = ref.watch(activeVehicleUuidProvider);
+  final prefs = await SharedPreferences.getInstance();
+  final savedJson = prefs.getString('inspection_$uuid');
+  if (savedJson != null) {
+    try {
+      final Map<String, dynamic> data = jsonDecode(savedJson);
+      // CheckStatus.problem.index is 3
+      return data.values.where((v) => v == 3).length;
+    } catch (_) {}
+  }
+  return 0;
+});
+
+// ── Bottom Navigation Tab Index Provider ─────────────────────────────────────
+final dashboardTabIndexProvider = StateProvider<int>((ref) => 0);

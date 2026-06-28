@@ -66,7 +66,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final recentScansAsync = ref.watch(recentScansProvider);
     final activeUuid = ref.watch(activeVehicleUuidProvider);
     final vehiclesAsync = ref.watch(vehiclesProvider);
-    final health = _calcHealthScore(obd);
+    final inspectionProblems = ref.watch(inspectionProblemsCountProvider).valueOrNull ?? 0;
+    final health = _calcHealthScore(obd, inspectionProblems);
     final size = MediaQuery.of(context).size;
 
     // Get active vehicle name dynamically
@@ -99,36 +100,54 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   score: health,
                   odometer: obd.currentOdometer,
                   vehicleName: vehicleName,
+                  onTap: () => _showHealthReportDialog(
+                      context, obd, inspectionProblems, schedulesAsync.valueOrNull ?? []),
                 ),
                 const SizedBox(height: 20),
 
                 // Sensor tiles
-                _SectionHeader(
-                  title: state == ObdConnectionState.connected
-                      ? 'Live Sensor OBD-II'
-                      : 'Sensor OBD-II (Data Terakhir)',
-                  trailing: state == ObdConnectionState.connected
-                      ? 'LIVE'
-                      : 'MEMORI',
+                GestureDetector(
+                  onTap: () => ref.read(dashboardTabIndexProvider.notifier).state = 1,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SectionHeader(
+                        title: state == ObdConnectionState.connected
+                            ? 'Live Sensor OBD-II'
+                            : 'Sensor OBD-II (Data Terakhir)',
+                        trailing: state == ObdConnectionState.connected
+                            ? 'LIVE'
+                            : 'MEMORI',
+                      ),
+                      const SizedBox(height: 10),
+                      _ObdSensorGrid(obd: obd),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 10),
-                _ObdSensorGrid(obd: obd),
                 const SizedBox(height: 20),
 
                 // Upcoming service
-                _SectionHeader(title: 'Jadwal Servis Berikutnya'),
-                const SizedBox(height: 10),
-                schedulesAsync.when(
-                  loading: () => const SizedBox(
-                      height: 80,
-                      child: Center(
-                          child: CircularProgressIndicator(
-                              color: AppTheme.neonCyan,
-                              strokeWidth: 2))),
-                  error: (_, __) => const SizedBox.shrink(),
-                  data: (schedules) => _UpcomingServiceCard(
-                      schedules: schedules,
-                      odometer: obd.currentOdometer),
+                GestureDetector(
+                  onTap: () => ref.read(dashboardTabIndexProvider.notifier).state = 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _SectionHeader(title: 'Jadwal Servis Berikutnya'),
+                      const SizedBox(height: 10),
+                      schedulesAsync.when(
+                        loading: () => const SizedBox(
+                            height: 80,
+                            child: Center(
+                                child: CircularProgressIndicator(
+                                    color: AppTheme.neonCyan,
+                                    strokeWidth: 2))),
+                        error: (_, __) => const SizedBox.shrink(),
+                        data: (schedules) => _UpcomingServiceCard(
+                            schedules: schedules,
+                            odometer: obd.currentOdometer),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 20),
 
@@ -182,7 +201,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  int _calcHealthScore(ObdBluetoothService obd) {
+  int _calcHealthScore(ObdBluetoothService obd, int inspectionProblems) {
     int score = 100;
     if (obd.batteryVoltage > 0) {
       if (obd.batteryVoltage < 12.0) score -= 25;
@@ -194,7 +213,230 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     }
     if (obd.fuelTrim.abs() > 10) score -= 10;
     if (obd.dtcCodes.isNotEmpty) score -= 15;
+    score -= (inspectionProblems * 10);
     return score.clamp(0, 100);
+  }
+
+  void _showHealthReportDialog(BuildContext context, ObdBluetoothService obd,
+      int inspectionProblems, List<Map<String, dynamic>> schedules) {
+    final health = _calcHealthScore(obd, inspectionProblems);
+    final recommendations = <Map<String, String>>[];
+
+    if (obd.dtcCodes.isNotEmpty) {
+      recommendations.add({
+        'title': 'DTC Error Terdeteksi (${obd.dtcCodes})',
+        'desc': 'Terdeteksi kode error malfungsi pada komputer mesin. Lakukan diagnosa dan reset DTC setelah perbaikan sensor.',
+        'action': 'Gunakan AI Chatbot untuk analisis detail DTC ini.',
+      });
+    }
+
+    if (obd.batteryVoltage > 0 && obd.batteryVoltage < 12.5) {
+      final isWeak = obd.batteryVoltage < 12.0;
+      recommendations.add({
+        'title': isWeak ? 'Tegangan Aki Lemah (${obd.batteryVoltage.toStringAsFixed(2)}V)' : 'Tegangan Aki Menurun (${obd.batteryVoltage.toStringAsFixed(2)}V)',
+        'desc': isWeak
+            ? 'Tegangan aki berada di bawah ambang batas aman. Segera cas ulang aki atau ganti baru untuk menghindari mogok.'
+            : 'Tegangan aki sedikit turun. Periksa koneksi terminal aki dari kerak atau korosi.',
+        'action': 'Periksa kelistrikan aki dan alternator.',
+      });
+    }
+
+    if (obd.coolantTemp > 0 && obd.coolantTemp > 100) {
+      final isOverheat = obd.coolantTemp > 105;
+      recommendations.add({
+        'title': isOverheat ? 'Radiator Overheat (${obd.coolantTemp.toStringAsFixed(1)}°C)' : 'Suhu Radiator Tinggi (${obd.coolantTemp.toStringAsFixed(1)}°C)',
+        'desc': isOverheat
+            ? 'Suhu radiator kritis! Parkir mobil segera, biarkan mesin dingin, lalu periksa kebocoran coolant atau kegagalan kipas radiator.'
+            : 'Suhu pendingin mesin tinggi. Periksa volume air coolant di tabung reservoir.',
+        'action': 'Periksa air radiator dan thermostat.',
+      });
+    }
+
+    if (obd.fuelTrim.abs() > 10) {
+      recommendations.add({
+        'title': 'Penyimpangan Campuran Bahan Bakar (${obd.fuelTrim.toStringAsFixed(2)}%)',
+        'desc': 'Campuran bensin dan udara terlalu kaya atau terlalu miskin. Periksa sensor O2 atau kebocoran vakum udara.',
+        'action': 'Periksa filter udara dan kebocoran selang vakum.',
+      });
+    }
+
+    if (inspectionProblems > 0) {
+      recommendations.add({
+        'title': 'Masalah Inspeksi Fisik ($inspectionProblems Masalah)',
+        'desc': 'Terdapat beberapa item bermasalah pada hasil cek fisik ban/kebocoran/rem di tab Inspeksi.',
+        'action': 'Buka menu Inspeksi Fisik untuk melihat daftar checklist.',
+      });
+    }
+
+    final overdueSchedules = schedules.where((s) {
+      final dateStr = s['next_predicted_date'] as String? ?? '';
+      final date = DateTime.tryParse(dateStr);
+      return date != null && date.isBefore(DateTime.now());
+    }).toList();
+
+    if (overdueSchedules.isNotEmpty) {
+      recommendations.add({
+        'title': 'Jadwal Servis Terlambat (${overdueSchedules.length} Servis)',
+        'desc': 'Ada jadwal servis berkala yang sudah melewati target tanggal atau kilometer.',
+        'action': 'Catat servis baru di menu Catatan Servis.',
+      });
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.darkSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.6,
+        maxChildSize: 0.9,
+        builder: (ctx, scrollCtrl) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Rencana Pemulihan Kesehatan (100% Health)',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Text(
+                    'Kondisi Saat Ini: $health/100',
+                    style: TextStyle(
+                        color: health >= 85
+                            ? AppTheme.neonGreen
+                            : health >= 65
+                                ? AppTheme.neonYellow
+                                : AppTheme.neonOrange,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14),
+                  ),
+                  const Spacer(),
+                  const Text('Daftar Rekomendasi Perbaikan',
+                      style: TextStyle(color: Colors.grey, fontSize: 12)),
+                ],
+              ),
+              const Divider(color: Colors.white10, height: 20),
+              Expanded(
+                child: recommendations.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.verified_user_rounded,
+                                size: 56, color: AppTheme.neonGreen),
+                            const SizedBox(height: 12),
+                            const Text(
+                              'Mobil Anda 100% Sehat!',
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Semua sensor OBD normal, tidak ada DTC, dan inspeksi fisik bersih.',
+                              style: TextStyle(
+                                  color: Colors.grey[500], fontSize: 12),
+                              textAlign: TextAlign.center,
+                            ),
+                          ],
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: scrollCtrl,
+                        itemCount: recommendations.length,
+                        itemBuilder: (ctx, idx) {
+                          final rec = recommendations[idx];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppTheme.darkBg,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                  color: AppTheme.neonOrange.withOpacity(0.2)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded,
+                                        color: AppTheme.neonOrange, size: 18),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        rec['title']!,
+                                        style: const TextStyle(
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  rec['desc']!,
+                                  style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontSize: 12,
+                                      height: 1.4),
+                                ),
+                                const SizedBox(height: 10),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.neonCyan.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.build_rounded,
+                                          color: AppTheme.neonCyan, size: 13),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Tindakan: ${rec['action']}',
+                                          style: const TextStyle(
+                                              color: AppTheme.neonCyan,
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   SliverAppBar _buildSliverAppBar(ObdConnectionState state) {
@@ -347,111 +589,119 @@ class _ConnectionBanner extends StatelessWidget {
 }
 
 class _HealthRingCard extends StatelessWidget {
-  final int score;
-  final int odometer;
-  final String vehicleName;
-  const _HealthRingCard(
-      {required this.score,
-      required this.odometer,
-      required this.vehicleName});
+    final int score;
+    final int odometer;
+    final String vehicleName;
+    final VoidCallback? onTap;
+    const _HealthRingCard(
+        {required this.score,
+        required this.odometer,
+        required this.vehicleName,
+        this.onTap});
 
-  @override
-  Widget build(BuildContext context) {
-    final color = score >= 85
-        ? AppTheme.neonGreen
-        : score >= 65
-            ? AppTheme.neonYellow
-            : AppTheme.neonOrange;
-    final label = score >= 85
-        ? 'Kondisi Prima'
-        : score >= 65
-            ? 'Perlu Perhatian'
-            : 'Segera Servis';
+    @override
+    Widget build(BuildContext context) {
+      final color = score >= 85
+          ? AppTheme.neonGreen
+          : score >= 65
+              ? AppTheme.neonYellow
+              : AppTheme.neonOrange;
+      final label = score >= 85
+          ? 'Kondisi Prima'
+          : score >= 65
+              ? 'Perlu Perhatian'
+              : 'Segera Servis';
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: color.withOpacity(0.2)),
-        boxShadow: [
-          BoxShadow(
-              color: color.withOpacity(0.08),
-              blurRadius: 24,
-              spreadRadius: 4)
-        ],
-      ),
-      child: Row(children: [
-        SizedBox(
-          width: 110,
-          height: 110,
-          child: Stack(alignment: Alignment.center, children: [
+      return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: AppTheme.darkSurface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: color.withOpacity(0.2)),
+            boxShadow: [
+              BoxShadow(
+                  color: color.withOpacity(0.08),
+                  blurRadius: 24,
+                  spreadRadius: 4)
+            ],
+          ),
+          child: Row(children: [
             SizedBox(
               width: 110,
               height: 110,
-              child: CircularProgressIndicator(
-                value: score / 100,
-                strokeWidth: 10,
-                backgroundColor: Colors.white.withOpacity(0.05),
-                valueColor: AlwaysStoppedAnimation(color),
-                strokeCap: StrokeCap.round,
+              child: Stack(alignment: Alignment.center, children: [
+                SizedBox(
+                  width: 110,
+                  height: 110,
+                  child: CircularProgressIndicator(
+                    value: score / 100,
+                    strokeWidth: 10,
+                    backgroundColor: Colors.white.withOpacity(0.05),
+                    valueColor: AlwaysStoppedAnimation(color),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                Column(mainAxisSize: MainAxisSize.min, children: [
+                  Text('$score',
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold)),
+                  Text('/ 100',
+                      style: TextStyle(
+                          color: Colors.grey[500], fontSize: 10)),
+                ]),
+              ]),
+            ).animate().scale(
+                delay: 100.ms, duration: 500.ms, curve: Curves.elasticOut),
+            const SizedBox(width: 20),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(label,
+                        style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12)),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text('Kesehatan Kendaraan',
+                      style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const SizedBox(height: 2),
+                  Text(vehicleName,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15)),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    Icon(Icons.speed, size: 13, color: Colors.grey[500]),
+                    const SizedBox(width: 4),
+                    Text('$odometer km',
+                        style: const TextStyle(
+                            color: Colors.grey, fontSize: 12)),
+                  ]),
+                  const SizedBox(height: 6),
+                  const Text('Ketuk untuk rencana pemulihan 100%',
+                      style: TextStyle(color: Colors.white24, fontSize: 9)),
+                ],
               ),
             ),
-            Column(mainAxisSize: MainAxisSize.min, children: [
-              Text('$score',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold)),
-              Text('/ 100',
-                  style: TextStyle(
-                      color: Colors.grey[500], fontSize: 10)),
-            ]),
           ]),
-        ).animate().scale(
-            delay: 100.ms, duration: 500.ms, curve: Curves.elasticOut),
-        const SizedBox(width: 20),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(label,
-                    style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12)),
-              ),
-              const SizedBox(height: 10),
-              const Text('Kesehatan Kendaraan',
-                  style: TextStyle(color: Colors.grey, fontSize: 12)),
-              const SizedBox(height: 2),
-              Text(vehicleName,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15)),
-              const SizedBox(height: 6),
-              Row(children: [
-                Icon(Icons.speed, size: 13, color: Colors.grey[500]),
-                const SizedBox(width: 4),
-                Text('$odometer km',
-                    style: const TextStyle(
-                        color: Colors.grey, fontSize: 12)),
-              ]),
-            ],
-          ),
         ),
-      ]),
-    ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05);
+      ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.05);
+    }
   }
-}
 
 class _ObdSensorGrid extends StatelessWidget {
   final ObdBluetoothService obd;
