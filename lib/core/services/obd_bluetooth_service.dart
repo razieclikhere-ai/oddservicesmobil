@@ -8,7 +8,7 @@ import '../database/app_database.dart';
 import 'ai_prediction_service.dart';
 import 'notification_service.dart';
 
-enum ObdConnectionState { disconnected, scanning, connecting, connected }
+enum ObdConnectionState { disconnected, scanning, connecting, connected, simulating }
 
 class ObdBluetoothService {
   static final ObdBluetoothService instance = ObdBluetoothService._internal();
@@ -170,6 +170,17 @@ class ObdBluetoothService {
 
   void disconnect() {
     _setDisconnected();
+  }
+
+  void startSimulationMode() {
+    _updateState(ObdConnectionState.simulating);
+    // Set default simulated data
+    coolantTemp = 85.0;
+    batteryVoltage = 13.5;
+    rpm = 1500.0;
+    speed = 60.0;
+    fuelTrim = 2.5;
+    dtcCodes = '';
   }
 
   void _cleanupHardware() {
