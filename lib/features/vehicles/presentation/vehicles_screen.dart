@@ -1,6 +1,6 @@
 // ────────────────────────────────────────────────────────────────────────────
 // features/vehicles/presentation/vehicles_screen.dart
-// Vehicle management — Riverpod activeVehicleProvider + safe parsing
+// Vehicle management — Riverpod activeVehicleProvider + Edit & Delete Specs
 // ────────────────────────────────────────────────────────────────────────────
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -17,7 +17,6 @@ import '../../../core/services/obd_bluetooth_service.dart';
 
 final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 
-// Singleton Dio for this screen
 final _dio = Dio(BaseOptions(
   baseUrl: 'https://api.groq.com/openai/v1',
   connectTimeout: const Duration(seconds: 15),
@@ -77,7 +76,7 @@ class _VehiclesScreenState extends ConsumerState<VehiclesScreen> {
             : _buildVehicleList(vehicles, activeUuid),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showAddVehicleDialog,
+        onPressed: () => _showVehicleForm(),
         backgroundColor: AppTheme.neonCyan,
         foregroundColor: Colors.black,
         icon: const Icon(Icons.add, size: 20),
@@ -87,15 +86,16 @@ class _VehiclesScreenState extends ConsumerState<VehiclesScreen> {
     );
   }
 
-  void _showAddVehicleDialog() {
+  void _showVehicleForm([Map<String, dynamic>? vehicleToEdit]) {
+    final isEdit = vehicleToEdit != null;
     final formKey = GlobalKey<FormState>();
-    final brandCtrl = TextEditingController();
-    final modelCtrl = TextEditingController();
-    final yearCtrl = TextEditingController();
-    final engineCtrl = TextEditingController();
-    final mileageCtrl = TextEditingController();
-    String fuelType = 'Petrol';
-    String transmission = 'Automatic';
+    final brandCtrl = TextEditingController(text: isEdit ? vehicleToEdit['brand'] : '');
+    final modelCtrl = TextEditingController(text: isEdit ? vehicleToEdit['model'] : '');
+    final yearCtrl = TextEditingController(text: isEdit ? vehicleToEdit['year']?.toString() : '');
+    final engineCtrl = TextEditingController(text: isEdit ? vehicleToEdit['engine_type'] : '');
+    final mileageCtrl = TextEditingController(text: isEdit ? vehicleToEdit['current_mileage']?.toString() : '');
+    String fuelType = isEdit ? (vehicleToEdit['fuel_type'] ?? 'Petrol') : 'Petrol';
+    String transmission = isEdit ? (vehicleToEdit['transmission_type'] ?? 'Automatic') : 'Automatic';
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -119,9 +119,9 @@ class _VehiclesScreenState extends ConsumerState<VehiclesScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'Tambah Kendaraan',
-                        style: TextStyle(
+                      Text(
+                        isEdit ? 'Ubah Spesifikasi Mobil' : 'Tambah Kendaraan',
+                        style: const TextStyle(
                             color: Colors.white,
                             fontSize: 18,
                             fontWeight: FontWeight.bold),
@@ -144,7 +144,9 @@ class _VehiclesScreenState extends ConsumerState<VehiclesScreen> {
                                 color: AppTheme.neonCyan),
                             const SizedBox(height: 16),
                             Text(
-                              'AI sedang menyusun jadwal servis berkala...',
+                              isEdit
+                                  ? 'Menyimpan perubahan spesifikasi...'
+                                  : 'AI sedang menyusun jadwal servis berkala...',
                               style: TextStyle(
                                   color: Colors.grey[400], fontSize: 13),
                               textAlign: TextAlign.center,
@@ -273,22 +275,48 @@ class _VehiclesScreenState extends ConsumerState<VehiclesScreen> {
                         onPressed: () async {
                           if (formKey.currentState?.validate() == true) {
                             setModal(() => isSaving = true);
-                            await _saveVehicleWithAi(
-                              brand: brandCtrl.text.trim(),
-                              model: modelCtrl.text.trim(),
-                              year: int.parse(yearCtrl.text.trim()),
-                              engine: engineCtrl.text.trim(),
-                              mileage: int.parse(mileageCtrl.text.trim()),
-                              fuel: fuelType,
-                              trans: transmission,
-                            );
+                            final brand = brandCtrl.text.trim();
+                            final model = modelCtrl.text.trim();
+                            final year = int.parse(yearCtrl.text.trim());
+                            final engine = engineCtrl.text.trim();
+                            final mileage = int.parse(mileageCtrl.text.trim());
+
+                            if (isEdit) {
+                              await AppDatabase.updateVehicle({
+                                'uuid': vehicleToEdit['uuid'],
+                                'name': '$brand $model',
+                                'brand': brand,
+                                'model': model,
+                                'year': year,
+                                'engine_type': engine,
+                                'fuel_type': fuelType,
+                                'transmission_type': transmission,
+                                'current_mileage': mileage,
+                                'is_active': vehicleToEdit['is_active'] ?? 1,
+                              });
+                              // Update OBD state if editing active vehicle
+                              if (vehicleToEdit['uuid'] == ref.read(activeVehicleUuidProvider)) {
+                                ObdBluetoothService.instance.activeVehicleName = '$brand $model';
+                                ObdBluetoothService.instance.currentOdometer = mileage;
+                              }
+                            } else {
+                              await _saveVehicleWithAi(
+                                brand: brand,
+                                model: model,
+                                year: year,
+                                engine: engine,
+                                mileage: mileage,
+                                fuel: fuelType,
+                                trans: transmission,
+                              );
+                            }
                             if (ctx.mounted) Navigator.pop(ctx);
                             ref.invalidate(vehiclesProvider);
                           }
                         },
-                        child: const Text('Simpan & Analisis AI',
-                            style:
-                                TextStyle(fontWeight: FontWeight.bold)),
+                        child: Text(
+                            isEdit ? 'Simpan Perubahan' : 'Simpan & Analisis AI',
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
                       ),
                     ),
                   ],
@@ -560,15 +588,22 @@ class _VehiclesScreenState extends ConsumerState<VehiclesScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  if (!isActive)
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined,
+                        color: AppTheme.neonCyan, size: 20),
+                    tooltip: 'Ubah detail kendaraan',
+                    onPressed: () => _showVehicleForm(v),
+                  ),
+                  if (!isActive) ...[
+                    const SizedBox(width: 4),
                     TextButton(
                       onPressed: () async {
                         await ref
                             .read(activeVehicleProvider.notifier)
                             .setActive(uuid);
-                        // Sync OBD service
                         ObdBluetoothService.instance.activeVehicleUuid = uuid;
                         ObdBluetoothService.instance.activeVehicleName = name;
+                        ObdBluetoothService.instance.currentOdometer = mileage;
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -582,8 +617,9 @@ class _VehiclesScreenState extends ConsumerState<VehiclesScreen> {
                           style:
                               TextStyle(color: AppTheme.neonCyan)),
                     ),
+                  ],
                   if (uuid != 'default-honda-jazz-ge8') ...[
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 4),
                     IconButton(
                       icon: const Icon(Icons.delete_outline,
                           color: AppTheme.neonOrange),
