@@ -224,6 +224,7 @@ class _ScanHistoryPageState extends ConsumerState<ScanHistoryPage> {
                     );
                   },
                 ),
+              ),
       ),
     );
   }

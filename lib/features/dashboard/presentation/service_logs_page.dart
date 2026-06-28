@@ -229,6 +229,7 @@ class _ServiceLogsPageState extends ConsumerState<ServiceLogsPage> {
                     );
                   },
                 ),
+              ),
       ),
     );
   }
