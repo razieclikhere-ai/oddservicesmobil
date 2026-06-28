@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
 import '../database/app_database.dart';
+import '../providers/app_providers.dart';
 import 'notification_service.dart';
 import 'obd_bluetooth_service.dart';
 
