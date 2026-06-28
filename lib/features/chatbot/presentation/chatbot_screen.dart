@@ -136,12 +136,20 @@ Jangan berikan penjelasan tentang format CMD ini ke pengguna, cukup eksekusi sec
     }
 
     try {
-      final response = await _dio.post('/chat/completions', data: {
-        'model': 'llama3-70b-8192',
-        'messages': _chatHistory,
-        'temperature': 0.5,
-        'max_tokens': 600,
-      });
+      final activeKey = await getEffectiveApiKey();
+      final response = await _dio.post(
+        '/chat/completions',
+        options: Options(headers: {
+          'Authorization': 'Bearer ${activeKey.isNotEmpty ? activeKey : _apiKey}',
+          'Content-Type': 'application/json',
+        }),
+        data: {
+          'model': 'llama3-70b-8192',
+          'messages': _chatHistory,
+          'temperature': 0.5,
+          'max_tokens': 600,
+        },
+      );
 
       final reply = response.data['choices'][0]['message']['content'] as String? ??
           'Maaf Bos, saya tidak mengerti.';

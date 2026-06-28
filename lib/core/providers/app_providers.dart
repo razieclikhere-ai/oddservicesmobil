@@ -115,3 +115,13 @@ final inspectionProblemsCountProvider =
 
 // ── Bottom Navigation Tab Index Provider ─────────────────────────────────────
 final dashboardTabIndexProvider = StateProvider<int>((ref) => 0);
+
+// ── Retrieve API Key dynamically (SharedPreferences first, then compile time) ─
+Future<String> getEffectiveApiKey() async {
+  final prefs = await SharedPreferences.getInstance();
+  final userKey = prefs.getString('user_groq_api_key');
+  if (userKey != null && userKey.trim().isNotEmpty) {
+    return userKey.trim();
+  }
+  return const String.fromEnvironment('GROQ_API_KEY', defaultValue: '');
+}

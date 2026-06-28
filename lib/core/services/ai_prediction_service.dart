@@ -49,7 +49,9 @@ class AiPredictionService {
     required double fuelTrim,
     required String dtcCodes,
   }) async {
-    if (_apiKey.isEmpty) {
+    final activeKey = await getEffectiveApiKey();
+    final key = activeKey.isNotEmpty ? activeKey : _apiKey;
+    if (key.isEmpty) {
       _log.w('AiPredictionService: GROQ_API_KEY not set – using local fallback');
       await _localFallbackSchedule(vehicleUuid, currentMileage);
       return;
@@ -84,7 +86,10 @@ Prediksikan jadwal servis berikutnya.''';
     try {
       final resp = await _dio.post(
         '/chat/completions',
-        options: _authHeaders,
+        options: Options(headers: {
+          'Authorization': 'Bearer $key',
+          'Content-Type': 'application/json',
+        }),
         data: {
           'model': 'llama3-70b-8192',
           'messages': [
@@ -166,7 +171,9 @@ Prediksikan jadwal servis berikutnya.''';
     required double speed,
     required String dtcCodes,
   }) async {
-    if (_apiKey.isEmpty) {
+    final activeKey = await getEffectiveApiKey();
+    final key = activeKey.isNotEmpty ? activeKey : _apiKey;
+    if (key.isEmpty) {
       return _localJazzyFallback(query, coolantTemp, batteryVoltage, rpm, dtcCodes);
     }
 
@@ -197,7 +204,10 @@ Prioritas diagnosa:
     try {
       final resp = await _dio.post(
         '/chat/completions',
-        options: _authHeaders,
+        options: Options(headers: {
+          'Authorization': 'Bearer $key',
+          'Content-Type': 'application/json',
+        }),
         data: {
           'model': 'llama3-8b-8192',
           'messages': [
@@ -228,7 +238,9 @@ Prioritas diagnosa:
     required int nextTargetMileage,
     required DateTime serviceDate,
   }) async {
-    if (_apiKey.isEmpty) {
+    final activeKey = await getEffectiveApiKey();
+    final key = activeKey.isNotEmpty ? activeKey : _apiKey;
+    if (key.isEmpty) {
       await _localServiceLogFallback(vehicleUuid, serviceType, oilBrand,
           currentMileage, nextTargetMileage, serviceDate);
       return;
@@ -250,7 +262,10 @@ Kembalikan JSON objek:
     try {
       final resp = await _dio.post(
         '/chat/completions',
-        options: _authHeaders,
+        options: Options(headers: {
+          'Authorization': 'Bearer $key',
+          'Content-Type': 'application/json',
+        }),
         data: {
           'model': 'llama3-8b-8192',
           'messages': [
@@ -387,7 +402,9 @@ Kembalikan JSON objek:
     required String dtcCodes,
     required bool isDriving,
   }) async {
-    if (_apiKey.isEmpty) {
+    final activeKey = await getEffectiveApiKey();
+    final key = activeKey.isNotEmpty ? activeKey : _apiKey;
+    if (key.isEmpty) {
       return isDriving ? "Hati-hati di jalan, Kak." : "Semua sistem terpantau normal, Kak.";
     }
 
@@ -415,7 +432,10 @@ ${isDriving ? '- MANDATORY: The user is currently driving (speed > 0). Keep your
     try {
       final resp = await _dio.post(
         '/chat/completions',
-        options: _authHeaders,
+        options: Options(headers: {
+          'Authorization': 'Bearer $key',
+          'Content-Type': 'application/json',
+        }),
         data: {
           'model': 'llama3-70b-8192',
           'messages': [

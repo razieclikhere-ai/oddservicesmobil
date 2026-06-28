@@ -1,6 +1,6 @@
 // ────────────────────────────────────────────────────────────────────────────
 // features/settings/presentation/settings_screen.dart
-// Full Settings screen — previously a placeholder
+// Settings screen — includes notification, OBD auto-connect, language, and Groq API Key
 // ────────────────────────────────────────────────────────────────────────────
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,6 +21,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _notifEnabled = true;
   bool _autoConnectObd = true;
   String _selectedLanguage = 'id';
+  String _apiKeySaved = '';
   bool _loading = true;
 
   @override
@@ -35,6 +36,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _notifEnabled = prefs.getBool('notif_enabled') ?? true;
       _autoConnectObd = prefs.getBool('auto_connect_obd') ?? true;
       _selectedLanguage = prefs.getString('language') ?? 'id';
+      _apiKeySaved = prefs.getString('user_groq_api_key') ?? '';
       _loading = false;
     });
   }
@@ -43,6 +45,70 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final prefs = await SharedPreferences.getInstance();
     if (value is bool) await prefs.setBool(key, value);
     if (value is String) await prefs.setString(key, value);
+  }
+
+  void _showApiKeyDialog() {
+    final ctrl = TextEditingController(text: _apiKeySaved);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        title: const Text('Kunci API Groq',
+            style: TextStyle(
+                color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Masukkan Kunci API Groq Anda (gsk_...) untuk koneksi AI yang stabil, aman, dan bebas dari batasan limit bersama.',
+              style: TextStyle(color: Colors.grey, fontSize: 12, height: 1.4),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: ctrl,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'gsk_...',
+                hintStyle: const TextStyle(color: Colors.white24),
+                filled: true,
+                fillColor: Colors.white.withOpacity(0.04),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonCyan,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () async {
+              final val = ctrl.text.trim();
+              final prefs = await SharedPreferences.getInstance();
+              if (val.isEmpty) {
+                await prefs.remove('user_groq_api_key');
+              } else {
+                await prefs.setString('user_groq_api_key', val);
+              }
+              setState(() {
+                _apiKeySaved = val;
+              });
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -59,8 +125,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
       body: _loading
           ? const Center(
-              child:
-                  CircularProgressIndicator(color: AppTheme.neonCyan))
+              child: CircularProgressIndicator(color: AppTheme.neonCyan))
           : ListView(
               padding: const EdgeInsets.all(16),
               children: [
@@ -71,15 +136,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     _SwitchTile(
                       icon: Icons.notifications_outlined,
                       title: 'Pengingat Servis',
-                      subtitle:
-                          'Notifikasi otomatis sebelum jadwal servis',
+                      subtitle: 'Notifikasi otomatis sebelum jadwal servis',
                       value: _notifEnabled,
                       onChanged: (v) async {
                         setState(() => _notifEnabled = v);
                         await _savePref('notif_enabled', v);
                         if (!v) {
-                          await NotificationService
-                              .cancelAllNotifications();
+                          await NotificationService.cancelAllNotifications();
                         }
                       },
                     ),
@@ -95,13 +158,36 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     _SwitchTile(
                       icon: Icons.bluetooth_outlined,
                       title: 'Auto-Connect OBD',
-                      subtitle:
-                          'Otomatis scan adaptor ELM327 saat aplikasi dibuka',
+                      subtitle: 'Otomatis scan adaptor ELM327 saat aplikasi dibuka',
                       value: _autoConnectObd,
                       onChanged: (v) async {
                         setState(() => _autoConnectObd = v);
                         await _savePref('auto_connect_obd', v);
                       },
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 16),
+
+                // ── Konfigurasi AI ──────────────────────────────────────────
+                _SectionHeader('Konfigurasi AI'),
+                _SettingsCard(
+                  children: [
+                    ListTile(
+                      leading: const Icon(Icons.vpn_key_outlined,
+                          color: AppTheme.neonCyan),
+                      title: const Text('Kunci API Groq',
+                          style: TextStyle(color: Colors.white, fontSize: 14)),
+                      subtitle: Text(
+                        _apiKeySaved.isEmpty
+                            ? 'Default (Menggunakan Kunci Cadangan)'
+                            : '${_apiKeySaved.substring(0, _apiKeySaved.length > 12 ? 12 : _apiKeySaved.length)}... (Ketuk untuk ubah)',
+                        style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      ),
+                      trailing: const Icon(Icons.arrow_forward_ios_rounded,
+                          size: 14, color: Colors.grey),
+                      onTap: _showApiKeyDialog,
                     ),
                   ],
                 ),
@@ -138,19 +224,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                               const SizedBox(height: 12),
                               ListTile(
                                 title: const Text('Bahasa Indonesia',
-                                    style: TextStyle(
-                                        color: Colors.white)),
+                                    style: TextStyle(color: Colors.white)),
                                 leading: const Text('🇮🇩'),
-                                onTap: () =>
-                                    Navigator.pop(context, 'id'),
+                                onTap: () => Navigator.pop(context, 'id'),
                               ),
                               ListTile(
                                 title: const Text('English',
-                                    style:
-                                        TextStyle(color: Colors.white)),
+                                    style: TextStyle(color: Colors.white)),
                                 leading: const Text('🇺🇸'),
-                                onTap: () =>
-                                    Navigator.pop(context, 'en'),
+                                onTap: () => Navigator.pop(context, 'en'),
                               ),
                               const SizedBox(height: 16),
                             ],
@@ -174,8 +256,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     _ActionTile(
                       icon: Icons.delete_outline,
                       title: 'Hapus Semua Riwayat Scan',
-                      subtitle:
-                          'Hapus semua log OBD dari penyimpanan lokal',
+                      subtitle: 'Hapus semua log OBD dari penyimpanan lokal',
                       iconColor: AppTheme.neonOrange,
                       onTap: () async {
                         final confirm = await showDialog<bool>(
@@ -192,32 +273,29 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             ),
                             actions: [
                               TextButton(
-                                onPressed: () =>
-                                    Navigator.pop(context, false),
+                                onPressed: () => Navigator.pop(context, false),
                                 child: const Text('Batal'),
                               ),
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(
                                     backgroundColor: AppTheme.neonOrange,
                                     foregroundColor: Colors.black),
-                                onPressed: () =>
-                                    Navigator.pop(context, true),
+                                onPressed: () => Navigator.pop(context, true),
                                 child: const Text('Hapus'),
                               ),
                             ],
                           ),
                         );
                         if (confirm == true && mounted) {
-                          final activeUuid = ref
-                              .read(activeVehicleUuidProvider);
+                          final activeUuid =
+                              ref.read(activeVehicleUuidProvider);
                           await AppDatabase.deleteAllScans(activeUuid);
                           ref.invalidate(scanHistoryProvider);
                           ref.invalidate(recentScansProvider);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                content: Text(
-                                    '✅ Riwayat scan berhasil dihapus'),
+                                content: Text('✅ Riwayat scan berhasil dihapus'),
                                 backgroundColor: AppTheme.neonGreen,
                               ),
                             );
@@ -308,6 +386,7 @@ class _SwitchTile extends StatelessWidget {
   final String title, subtitle;
   final bool value;
   final ValueChanged<bool> onChanged;
+
   const _SwitchTile({
     required this.icon,
     required this.title,
@@ -315,20 +394,21 @@ class _SwitchTile extends StatelessWidget {
     required this.value,
     required this.onChanged,
   });
+
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, color: AppTheme.neonCyan),
+    return SwitchListTile(
+      secondary: Icon(icon, color: AppTheme.neonCyan),
       title: Text(title,
-          style: const TextStyle(
-              color: Colors.white, fontSize: 14)),
+          style: const TextStyle(color: Colors.white, fontSize: 14)),
       subtitle: Text(subtitle,
-          style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-      trailing: Switch(
-        value: value,
-        onChanged: onChanged,
-        activeColor: AppTheme.neonCyan,
-      ),
+          style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+      value: value,
+      onChanged: onChanged,
+      activeColor: AppTheme.neonCyan,
+      activeTrackColor: AppTheme.neonCyan.withOpacity(0.2),
+      inactiveThumbColor: Colors.grey,
+      inactiveTrackColor: Colors.white10,
     );
   }
 }
@@ -337,27 +417,27 @@ class _SelectTile extends StatelessWidget {
   final IconData icon;
   final String title, value;
   final VoidCallback onTap;
+
   const _SelectTile({
     required this.icon,
     required this.title,
     required this.value,
     required this.onTap,
   });
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(icon, color: AppTheme.neonCyan),
       title: Text(title,
-          style: const TextStyle(
-              color: Colors.white, fontSize: 14)),
+          style: const TextStyle(color: Colors.white, fontSize: 14)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(value,
-              style:
-                  const TextStyle(color: AppTheme.neonCyan, fontSize: 13)),
-          const SizedBox(width: 4),
-          const Icon(Icons.chevron_right, color: Colors.grey, size: 18),
+          Text(value, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          const SizedBox(width: 8),
+          const Icon(Icons.arrow_forward_ios_rounded,
+              size: 14, color: Colors.grey),
         ],
       ),
       onTap: onTap,
@@ -370,6 +450,7 @@ class _ActionTile extends StatelessWidget {
   final String title, subtitle;
   final Color iconColor;
   final VoidCallback onTap;
+
   const _ActionTile({
     required this.icon,
     required this.title,
@@ -377,16 +458,17 @@ class _ActionTile extends StatelessWidget {
     required this.iconColor,
     required this.onTap,
   });
+
   @override
   Widget build(BuildContext context) {
     return ListTile(
       leading: Icon(icon, color: iconColor),
       title: Text(title,
-          style: TextStyle(color: iconColor, fontSize: 14)),
+          style: const TextStyle(color: Colors.white, fontSize: 14)),
       subtitle: Text(subtitle,
-          style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-      trailing: const Icon(Icons.chevron_right,
-          color: Colors.grey, size: 18),
+          style: TextStyle(color: Colors.grey[500], fontSize: 11)),
+      trailing: const Icon(Icons.arrow_forward_ios_rounded,
+          size: 14, color: Colors.grey),
       onTap: onTap,
     );
   }
@@ -395,6 +477,7 @@ class _ActionTile extends StatelessWidget {
 class _InfoRow extends StatelessWidget {
   final String label, value;
   const _InfoRow(this.label, this.value);
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -402,12 +485,12 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(
-                  color: Colors.grey[500], fontSize: 13)),
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
           Text(value,
               style: const TextStyle(
-                  color: Colors.white70, fontSize: 13)),
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold)),
         ],
       ),
     );
