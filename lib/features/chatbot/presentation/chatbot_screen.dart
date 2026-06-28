@@ -100,13 +100,22 @@ Jangan berikan penjelasan tentang format CMD ini ke pengguna, cukup eksekusi sec
       time: DateTime.now(),
     ));
 
-    if (const String.fromEnvironment('GROQ_API_KEY', defaultValue: '').isEmpty) {
-      _messages.add(ChatMessage(
-        text:
-            '⚠️ Catatan: Aplikasi ini dikompilasi dengan API Key Groq kosong (--dart-define=GROQ_API_KEY=). AI Jazzy saat ini berjalan menggunakan kunci cadangan bersama yang memiliki batasan akses ketat. Jika koneksi gagal, harap bangun aplikasi menggunakan API Key pribadi Anda.',
-        isUser: false,
-        time: DateTime.now(),
-      ));
+    _checkApiKeyWarning();
+  }
+
+  Future<void> _checkApiKeyWarning() async {
+    final activeKey = await getEffectiveApiKey();
+    if (activeKey.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _messages.add(ChatMessage(
+            text:
+                '⚠️ Catatan: Aplikasi berjalan menggunakan kunci cadangan bersama yang memiliki akses sangat terbatas. Jika Anda menemui kendala koneksi AI, mohon masukkan Kunci API Groq pribadi Anda di menu Pengaturan ⚙️.',
+            isUser: false,
+            time: DateTime.now(),
+          ));
+        });
+      }
     }
   }
 
@@ -161,11 +170,13 @@ Jangan berikan penjelasan tentang format CMD ini ke pengguna, cukup eksekusi sec
     } on DioException catch (e) {
       _chatHistory.removeLast();
       String errMsg = 'Gagal terhubung ke server AI.';
-      if (e.response?.statusCode == 401) {
-        errMsg = 'API Key tidak valid. Periksa konfigurasi.';
-      }
-      if (e.type == DioExceptionType.connectionTimeout) {
-        errMsg = 'Koneksi timeout. Cek koneksi internet.';
+      final code = e.response?.statusCode;
+      if (code == 401 || code == 403) {
+        errMsg = 'Kunci API Groq Anda tidak valid, kadaluarsa, atau telah dinonaktifkan (revoked). Silakan buat API Key baru di dashboard Groq dan masukkan di menu Pengaturan, Kak.';
+      } else if (e.type == DioExceptionType.connectionTimeout) {
+        errMsg = 'Koneksi timeout. Silakan cek jaringan internet Anda.';
+      } else {
+        errMsg = 'Gagal terhubung ke server AI (HTTP ${code ?? e.type.name}).';
       }
       setState(() {
         _messages.insert(

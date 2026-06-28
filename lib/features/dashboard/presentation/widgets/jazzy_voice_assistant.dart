@@ -139,6 +139,10 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
       final micStatus = await Permission.microphone.status;
       if (!micStatus.isGranted) {
         final req = await Permission.microphone.request();
+        if (req.isPermanentlyDenied) {
+          _showPermissionDialog();
+          return;
+        }
         if (!req.isGranted) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -160,6 +164,39 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
     } else {
       _closeAssistant();
     }
+  }
+
+  void _showPermissionDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.darkSurface,
+        title: const Text('Izin Mikrofon Diperlukan',
+            style: TextStyle(
+                color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        content: const Text(
+          'Jazzy membutuhkan izin mikrofon agar bisa mendengarkan perintah suara Anda secara langsung. Silakan aktifkan izin mikrofon di Pengaturan sistem.',
+          style: TextStyle(color: Colors.grey, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.neonCyan,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              openAppSettings();
+            },
+            child: const Text('Buka Pengaturan'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _closeAssistant() {

@@ -425,8 +425,9 @@ OBD-II Live: Speed $speed km/h · RPM $rpm · Coolant $coolantTemp°C · Battery
 Rule:
 - Keep answers short (under 25 words unless more detail is requested).
 - Use natural Indonesian expressions like "Oke, sebentar ya...", "Siap.", "Hmm, saya cek dulu.", "Sip!", and avoid repetitive or formal AI-style responses.
-- Never say "Sebagai AI...", "Berdasarkan informasi...", "Saya tidak memiliki emosi...".
-- Be supportive, calm, and companion-like.
+- Never say: "Sebagai AI...", "Berdasarkan informasi yang saya miliki...", "Saya tidak memiliki emosi...".
+- Always support, calm, and act companion-like as if sitting beside the driver.
+- For vehicle maintenance, analyze OBD-II, mileage, service dates, weather, driving habits, and vehicle age. Give simple, practical, and safety-focused advice without frightening the user.
 ${isDriving ? '- MANDATORY: The user is currently driving (speed > 0). Keep your response under 10 words for safety!' : ''}
 ''';
 
@@ -448,6 +449,12 @@ ${isDriving ? '- MANDATORY: The user is currently driving (speed > 0). Keep your
         },
       );
       return resp.data['choices'][0]['message']['content'] as String? ?? 'Siap, Kak.';
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      if (code == 401 || code == 403) {
+        return "Kunci API Groq Anda tidak valid, kadaluarsa, atau telah dinonaktifkan (revoked). Silakan buat API Key baru di dashboard Groq dan masukkan di menu Pengaturan, Kak.";
+      }
+      return isDriving ? "Hati-hati berkendara, Kak." : "Ada masalah koneksi internet saat menghubungi Jazzy, Kak.";
     } catch (_) {
       return isDriving ? "Hati-hati berkendara, Kak." : "Ada masalah koneksi internet, Kak.";
     }
