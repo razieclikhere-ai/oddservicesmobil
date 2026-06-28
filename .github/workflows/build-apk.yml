@@ -33,17 +33,17 @@ jobs:
         flutter create . --org com.smart.obd --project-name smart_obd_assistant
         rm -rf test
 
-    - name: Patch Kotlin Gradle Plugin version to 1.9.24
+    - name: Patch Kotlin Gradle Plugin version to 2.0.21
       run: |
         python3 -c "
         import os, re
         if os.path.exists('android/settings.gradle'):
             f=open('android/settings.gradle'); c=f.read(); f.close()
-            c=re.sub(r'id\s+[\"\']org\.jetbrains\.kotlin\.android[\"\']\s+version\s+[\"\'][^\"\']+[\"\']', 'id \"org.jetbrains.kotlin.android\" version \"1.9.24\"', c)
+            c=re.sub(r'id\s+[\"\']org\.jetbrains\.kotlin\.android[\"\']\s+version\s+[\"\'][^\"\']+[\"\']', 'id \"org.jetbrains.kotlin.android\" version \"2.0.21\"', c)
             f=open('android/settings.gradle', 'w'); f.write(c); f.close()
         if os.path.exists('android/build.gradle'):
             f=open('android/build.gradle'); c=f.read(); f.close()
-            c=re.sub(r'ext\.kotlin_version\s*=\s*[\"\'][^\"\']+[\"\']', \"ext.kotlin_version = '1.9.24'\", c)
+            c=re.sub(r'ext\.kotlin_version\s*=\s*[\"\'][^\"\']+[\"\']', \"ext.kotlin_version = '2.0.21'\", c)
             f=open('android/build.gradle', 'w'); f.write(c); f.close()
         "
 
@@ -52,12 +52,12 @@ jobs:
 
     - name: Patch android/build.gradle for legacy plugins
       run: |
-        echo -e "\next.flutter = [\n    compileSdkVersion: 34,\n    minSdkVersion: 21,\n    targetSdkVersion: 34\n]" >> android/build.gradle
+        echo -e "\next.flutter = [\n    compileSdkVersion: 36,\n    minSdkVersion: 21,\n    targetSdkVersion: 34\n]" >> android/build.gradle
 
-    - name: Patch app-level build.gradle for JVM 17
+    - name: Patch app-level build.gradle for JVM 17 and compileSdk 36
       run: |
         python3 -c "
-        import os
+        import os, re
         path = 'android/app/build.gradle'
         if os.path.exists(path):
             f=open(path); c=f.read(); f.close()
@@ -65,6 +65,8 @@ jobs:
             c = c.replace('targetCompatibility JavaVersion.VERSION_1_8', 'targetCompatibility JavaVersion.VERSION_17')
             c = c.replace(\"jvmTarget = '1.8'\", \"jvmTarget = '17'\")
             c = c.replace('jvmTarget = \"1.8\"', 'jvmTarget = \"17\"')
+            c = re.sub(r'compileSdk\s*=?\s*\d+', 'compileSdk = 36', c)
+            c = re.sub(r'compileSdkVersion\s*\d+', 'compileSdkVersion 36', c)
             f=open(path, 'w'); f.write(c); f.close()
         "
 
