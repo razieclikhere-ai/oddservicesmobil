@@ -39,9 +39,9 @@ class _ChatbotScreenState extends ConsumerState<ChatbotScreen> {
   bool _isLoading = false;
 
   static String get _obfuscatedApiKey {
-    const part1 = 'gsk_uWpOlfDi';
-    const part2 = 'qYngOWGb2Qz8WGdy';
-    const part3 = 'b3FY4tftssC7EzBOy7HeDcqK4Grg';
+    const part1 = 'gsk_f8qH2zII';
+    const part2 = 'MzVqwxjRguvKWGdy';
+    const part3 = 'b3FYrNIlN9WAJ6Yn3NQXA8hku7LA';
     return part1 + part2 + part3;
   }
 
