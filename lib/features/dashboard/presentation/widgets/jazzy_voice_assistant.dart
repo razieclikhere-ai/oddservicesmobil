@@ -46,7 +46,7 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
     await _flutterTts.setPitch(0.95); // Friendly female pitch adjustment
 
     try {
-      final voices = await _flutterTts.getVoices();
+      final dynamic voices = await _flutterTts.getVoices;
       String? bestVoice;
       for (final v in voices) {
         final String name = (v['name'] as String? ?? '').toLowerCase();
