@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:speech_to_text/speech_to_text.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:logger/logger.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/obd_bluetooth_service.dart';
 import '../../../../core/services/ai_prediction_service.dart';
+
+final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 
 class JazzyVoiceAssistant extends StatefulWidget {
   const JazzyVoiceAssistant({Key? key}) : super(key: key);
@@ -19,27 +24,32 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
   bool _isListening = false;
   bool _isThinking = false;
   bool _isSpeaking = false;
-  String _statusText = "Ketuk untuk Bicara";
-  
+  String _statusText = "Ketuk untuk Aktifkan";
+
   late FlutterTts _flutterTts;
+  final SpeechToText _speechToText = SpeechToText();
+  bool _speechInitialized = false;
+  bool _alwaysOnMode = true; // Auto-listen loop after speaking
 
   @override
   void initState() {
     super.initState();
     _initTts();
+    _initSpeech();
   }
 
   void _initTts() {
     _flutterTts = FlutterTts();
     _flutterTts.setLanguage("id-ID");
-    _flutterTts.setSpeechRate(0.48); // Calmer, more polite speech speed
+    _flutterTts.setSpeechRate(0.48); // Natural conversational speed
     _flutterTts.setVolume(1.0);
-    _flutterTts.setPitch(0.95); // Warmer, more humanistic tone
+    _flutterTts.setPitch(0.95); // Friendly female pitch adjustment
 
     _flutterTts.setStartHandler(() {
       if (mounted) {
         setState(() {
           _isSpeaking = true;
+          _isListening = false;
           _statusText = "Jazzy Berbicara...";
         });
       }
@@ -49,8 +59,12 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
       if (mounted) {
         setState(() {
           _isSpeaking = false;
-          _statusText = "Ketuk untuk Bicara";
+          _statusText = "Mendengarkan...";
         });
+        // After speaking, automatically return to listening mode if open
+        if (_isOpen && _alwaysOnMode) {
+          _startSpeechListening();
+        }
       }
     });
 
@@ -60,32 +74,156 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
           _isSpeaking = false;
           _statusText = "Ketuk untuk Bicara";
         });
+        if (_isOpen && _alwaysOnMode) {
+          _startSpeechListening();
+        }
       }
     });
   }
 
-  void _toggleOpen() {
+  Future<void> _initSpeech() async {
+    try {
+      _speechInitialized = await _speechToText.initialize(
+        onStatus: (status) {
+          _log.d("SpeechToText Status: $status");
+          if (status == 'notListening') {
+            if (mounted && _isOpen && !_isSpeaking && !_isThinking && _alwaysOnMode) {
+              // Restart listening in always-on loop
+              _startSpeechListening();
+            }
+          }
+        },
+        onError: (error) {
+          _log.w("SpeechToText Error: ${error.errorMsg}");
+          if (mounted && _isOpen && !_isSpeaking && !_isThinking && _alwaysOnMode) {
+            // Retry listening
+            Future.delayed(const Duration(milliseconds: 800), () {
+              if (mounted && _isOpen) _startSpeechListening();
+            });
+          }
+        },
+      );
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      _log.e("Speech initialization failed: $e");
+    }
+  }
+
+  void _toggleOpen() async {
+    if (!_isOpen) {
+      // Check and request microphone permission
+      final micStatus = await Permission.microphone.status;
+      if (!micStatus.isGranted) {
+        final req = await Permission.microphone.request();
+        if (!req.isGranted) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Izin mikrofon ditolak. Silakan aktifkan di Pengaturan.'),
+                backgroundColor: AppTheme.neonOrange,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
+      setState(() {
+        _isOpen = true;
+        _alwaysOnMode = true;
+      });
+      _startSpeechListening();
+    } else {
+      _closeAssistant();
+    }
+  }
+
+  void _closeAssistant() {
+    _flutterTts.stop();
+    _speechToText.stop();
     setState(() {
-      _isOpen = !_isOpen;
-      if (!_isOpen) {
-        _isListening = false;
-        _isThinking = false;
-        _isSpeaking = false;
-        _flutterTts.stop();
-        _statusText = "Ketuk untuk Bicara";
-      } else {
-        // Start listening automatically when opened
-        _startListeningSim();
-      }
+      _isOpen = false;
+      _isListening = false;
+      _isThinking = false;
+      _isSpeaking = false;
+      _alwaysOnMode = false;
+      _statusText = "Ketuk untuk Aktifkan";
     });
   }
 
-  Future<void> _speak(String text) async {
-    await _flutterTts.stop();
-    await _flutterTts.speak(text);
+  Future<void> _startSpeechListening() async {
+    if (!_speechInitialized) {
+      await _initSpeech();
+    }
+    if (_isSpeaking || _isThinking || !_isOpen) return;
+
+    setState(() {
+      _isListening = true;
+      _statusText = "Mendengarkan...";
+    });
+
+    try {
+      await _speechToText.listen(
+        onResult: (result) {
+          if (mounted && result.finalResult) {
+            final words = result.recognizedWords.trim();
+            _processVoiceWords(words);
+          }
+        },
+        localeId: "id-ID",
+        listenFor: const Duration(seconds: 20),
+        pauseFor: const Duration(seconds: 4),
+      );
+    } catch (e) {
+      _log.w("Error starting speech listen: $e");
+    }
   }
 
-  Future<void> _handleCommand(String command) async {
+  void _processVoiceWords(String rawWords) async {
+    final words = rawWords.toLowerCase().trim();
+    if (words.isEmpty) return;
+
+    _log.i("Voice Input: $words");
+
+    // Check for sleep/stop commands
+    if (words.contains("tidur") || words.contains("stop mendengarkan") || words.contains("selesai")) {
+      setState(() {
+        _alwaysOnMode = false;
+        _isListening = false;
+      });
+      await _speechToText.stop();
+      await _speak("Siap. Saya istirahat dulu ya, Kak. Hati-hati di jalan!");
+      _closeAssistant();
+      return;
+    }
+
+    // Wake words check: "Hei Jazzy" or "Jazzy"
+    bool hasWakeWord = words.contains("hei jazzy") || words.contains("jazzy");
+    String command = rawWords;
+
+    if (hasWakeWord) {
+      // Strip wake word for cleaner processing
+      command = rawWords
+          .replaceAll(RegExp(r'hei jazzy', caseSensitive: false), '')
+          .replaceAll(RegExp(r'jazzy', caseSensitive: false), '')
+          .trim();
+    }
+
+    // If the assistant is open, we respond to any speech, but if they just said the wake word empty, say greeting
+    if (command.isEmpty && hasWakeWord) {
+      await _speak("Ya Kak? Ada yang bisa saya bantu untuk mobilnya?");
+      return;
+    }
+
+    if (command.isNotEmpty) {
+      await _handleVoiceCommand(command);
+    }
+  }
+
+  Future<void> _handleVoiceCommand(String command) async {
+    await _speechToText.stop();
     setState(() {
       _isListening = false;
       _isThinking = true;
@@ -93,50 +231,36 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
     });
 
     final obd = ObdBluetoothService.instance;
-    final response = await AiPredictionService.getJazzyResponse(
+    final isDriving = obd.speed > 0;
+
+    final response = await AiPredictionService.getJazzyVoiceResponse(
       query: command,
       coolantTemp: obd.coolantTemp,
       batteryVoltage: obd.batteryVoltage,
       rpm: obd.rpm,
       speed: obd.speed,
       dtcCodes: obd.dtcCodes,
+      isDriving: isDriving,
     );
 
-    if (mounted) {
+    if (mounted && _isOpen) {
       setState(() {
         _isThinking = false;
       });
-      // Speak out loud using TTS!
-      _speak(response);
+      await _speak(response);
     }
   }
 
-  void _startListeningSim() {
-    if (_isListening || _isThinking || _isSpeaking) return;
-
-    _flutterTts.stop();
-    setState(() {
-      _isListening = true;
-      _statusText = "Mendengarkan...";
-    });
-
-    // Simulate listening duration (2.5 seconds) then pick a random query
-    Timer(const Duration(milliseconds: 2500), () {
-      if (mounted && _isListening) {
-        final list = [
-          "Bagaimana kondisi mobil?",
-          "Cek tegangan aki",
-          "Berapa suhu radiator?"
-        ];
-        final randomCommand = list[DateTime.now().second % list.length];
-        _handleCommand(randomCommand);
-      }
-    });
+  Future<void> _speak(String text) async {
+    if (!_isOpen) return;
+    await _flutterTts.stop();
+    await _flutterTts.speak(text);
   }
 
   @override
   void dispose() {
     _flutterTts.stop();
+    _speechToText.stop();
     super.dispose();
   }
 
@@ -154,7 +278,7 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        // ── Speech visualizer bar (NO CHAT BUBBLE!) ───────────────────────────
+        // ── Speech visualizer bar ─────────────────────────────────────────────
         if (_isOpen)
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -210,19 +334,20 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                // Interactive Mic Tap trigger
+                // Tap to Interrupt or Stop Speaking
                 GestureDetector(
                   onTap: () {
-                    if (!_isListening && !_isThinking && !_isSpeaking) {
-                      _startListeningSim();
-                    } else {
+                    if (_isSpeaking) {
                       _flutterTts.stop();
+                      _startSpeechListening();
+                    } else if (_isListening) {
+                      _speechToText.stop();
                       setState(() {
                         _isListening = false;
-                        _isThinking = false;
-                        _isSpeaking = false;
-                        _statusText = "Ketuk untuk Bicara";
+                        _statusText = "Jazzy Siaga";
                       });
+                    } else {
+                      _startSpeechListening();
                     }
                   },
                   child: Container(

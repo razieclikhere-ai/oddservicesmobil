@@ -367,4 +367,60 @@ Kembalikan JSON objek:
     }
     return 'Halo Bos! Ada yang bisa Jazzy bantu soal kondisi kendaraan Anda hari ini? 😊';
   }
+
+  // Jazzy Voice Response (Friendly, Soft, Female Automotive AI Companion)
+  // ══════════════════════════════════════════════════════════════════════════
+  static Future<String> getJazzyVoiceResponse({
+    required String query,
+    required double coolantTemp,
+    required double batteryVoltage,
+    required double rpm,
+    required double speed,
+    required String dtcCodes,
+    required bool isDriving,
+  }) async {
+    if (_apiKey.isEmpty) {
+      return isDriving ? "Hati-hati di jalan, Kak." : "Semua sistem terpantau normal, Kak.";
+    }
+
+    final vehicleUuid = ObdBluetoothService.instance.activeVehicleUuid;
+    final vehicle = await AppDatabase.getVehicle(vehicleUuid);
+    final specs = vehicle != null
+        ? '${vehicle['brand']} ${vehicle['model']} (${vehicle['year']})'
+        : 'Honda Jazz';
+
+    final systemPrompt = '''
+You are Jazzy, a friendly female automotive AI assistant.
+Speak naturally like a real human, never like a chatbot or robot. Use warm, casual Indonesian with a soft, cheerful female personality.
+
+Active vehicle: $specs.
+OBD-II Live: Speed $speed km/h · RPM $rpm · Coolant $coolantTemp°C · Battery $batteryVoltage V · DTC: $dtcCodes.
+
+Rule:
+- Keep answers short (under 25 words unless more detail is requested).
+- Use natural Indonesian expressions like "Oke, sebentar ya...", "Siap.", "Hmm, saya cek dulu.", "Sip!", and avoid repetitive or formal AI-style responses.
+- Never say "Sebagai AI...", "Berdasarkan informasi...", "Saya tidak memiliki emosi...".
+- Be supportive, calm, and companion-like.
+${isDriving ? '- MANDATORY: The user is currently driving (speed > 0). Keep your response under 10 words for safety!' : ''}
+''';
+
+    try {
+      final resp = await _dio.post(
+        '/chat/completions',
+        options: _authHeaders,
+        data: {
+          'model': 'llama3-70b-8192',
+          'messages': [
+            {'role': 'system', 'content': systemPrompt},
+            {'role': 'user', 'content': query},
+          ],
+          'temperature': 0.6,
+          'max_tokens': 100,
+        },
+      );
+      return resp.data['choices'][0]['message']['content'] as String? ?? 'Siap, Kak.';
+    } catch (_) {
+      return isDriving ? "Hati-hati berkendara, Kak." : "Ada masalah koneksi internet, Kak.";
+    }
+  }
 }
