@@ -32,9 +32,9 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
   void _initTts() {
     _flutterTts = FlutterTts();
     _flutterTts.setLanguage("id-ID");
-    _flutterTts.setSpeechRate(0.55); // Friendly conversational speed
+    _flutterTts.setSpeechRate(0.48); // Calmer, more polite speech speed
     _flutterTts.setVolume(1.0);
-    _flutterTts.setPitch(1.0);
+    _flutterTts.setPitch(0.95); // Warmer, more humanistic tone
 
     _flutterTts.setStartHandler(() {
       if (mounted) {
