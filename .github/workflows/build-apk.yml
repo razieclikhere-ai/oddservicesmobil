@@ -70,17 +70,17 @@ jobs:
         // Provide flutter SDK version constants for plugins like flutter_blue_classic
         ext.flutter = [
             compileSdkVersion: 36,
-            minSdkVersion    : 21,
+            minSdkVersion    : 24,
             targetSdkVersion : 34
         ]
         GROOVY
         echo "android/build.gradle after injection (last 20 lines):"
         tail -20 android/build.gradle
 
-    # ── Fix 3: Force compileSdk 36 in app/build.gradle ─────────────────────────
+    # ── Fix 3: Force compileSdk 36 and minSdkVersion 24 in app/build.gradle ────
     # Flutter 3.24 uses `flutter.compileSdkVersion` (a variable), not a literal.
     # Replace variable reference AND any literal values.
-    - name: Force compileSdk = 36 in app/build.gradle
+    - name: Force compileSdk = 36 and minSdkVersion = 24 in app/build.gradle
       run: |
         python3 - <<'PYEOF'
         import os, re
@@ -95,9 +95,12 @@ jobs:
         # 1. Replace any literal compileSdk / compileSdkVersion numbers
         c = re.sub(r'compileSdk\s*=\s*\d+', 'compileSdk = 36', c)
         c = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 36', c)
+        c = re.sub(r'minSdkVersion\s*=\s*\d+', 'minSdkVersion = 24', c)
+        c = re.sub(r'minSdkVersion\s+\d+', 'minSdkVersion 24', c)
 
-        # 2. Replace flutter.compileSdkVersion variable reference
+        # 2. Replace flutter variables
         c = c.replace('flutter.compileSdkVersion', '36')
+        c = c.replace('flutter.minSdkVersion', '24')
 
         # 3. JVM target upgrade
         c = c.replace('sourceCompatibility JavaVersion.VERSION_1_8',
