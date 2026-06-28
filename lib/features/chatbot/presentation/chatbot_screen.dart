@@ -13,6 +13,7 @@ import '../../../core/theme/app_theme.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/services/ai_prediction_service.dart';
+import '../../../core/services/obd_bluetooth_service.dart';
 
 const int _maxHistory = 20;
 

@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../core/providers/app_providers.dart';
 import 'dashboard_screen.dart';
 import 'obd_live_page.dart';
 import 'schedule_page.dart';

@@ -7,6 +7,7 @@ import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
 import '../database/app_database.dart';
 import 'notification_service.dart';
+import 'obd_bluetooth_service.dart';
 
 final _log = Logger(printer: PrettyPrinter(methodCount: 0));
 
