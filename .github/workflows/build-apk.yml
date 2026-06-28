@@ -33,18 +33,30 @@ jobs:
         flutter create . --org com.smart.obd --project-name smart_obd_assistant
         rm -rf test
 
-    - name: Patch Kotlin Gradle Plugin version to 1.9.24
+    - name: Patch Kotlin, AGP and Gradle wrapper versions
       run: |
         python3 -c "
         import os, re
+        # 1. Patch Kotlin Android version in settings.gradle
         if os.path.exists('android/settings.gradle'):
             f=open('android/settings.gradle'); c=f.read(); f.close()
             c=re.sub(r'id\s+[\"\']org\.jetbrains\.kotlin\.android[\"\']\s+version\s+[\"\'][^\"\']+[\"\']', 'id \"org.jetbrains.kotlin.android\" version \"1.9.24\"', c)
+            # 2. Patch AGP version in settings.gradle
+            c=re.sub(r'id\s+[\"\']com\.android\.application[\"\']\s+version\s+[\"\'][^\"\']+[\"\']', 'id \"com.android.application\" version \"8.1.1\"', c)
             f=open('android/settings.gradle', 'w'); f.write(c); f.close()
+            
+        # 3. Patch kotlin_version in build.gradle
         if os.path.exists('android/build.gradle'):
             f=open('android/build.gradle'); c=f.read(); f.close()
             c=re.sub(r'ext\.kotlin_version\s*=\s*[\"\'][^\"\']+[\"\']', \"ext.kotlin_version = '1.9.24'\", c)
             f=open('android/build.gradle', 'w'); f.write(c); f.close()
+
+        # 4. Patch Gradle wrapper version to 8.2-all
+        wrapper_path = 'android/gradle/wrapper/gradle-wrapper.properties'
+        if os.path.exists(wrapper_path):
+            f=open(wrapper_path); c=f.read(); f.close()
+            c=re.sub(r'distributionUrl=.*', 'distributionUrl=https\\://services.gradle.org/distributions/gradle-8.2-all.zip', c)
+            f=open(wrapper_path, 'w'); f.write(c); f.close()
         "
 
     - name: Copy AndroidManifest with Bluetooth permissions

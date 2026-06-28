@@ -403,8 +403,6 @@ Odometer Saat Ini: $mileage km
       itemBuilder: (context, index) {
         final v = _vehicles[index];
         final name = v['name'] as String;
-        final brand = v['brand'] as String;
-        final model = v['model'] as String;
         final year = v['year'] as int;
         final engine = v['engine_type'] as String;
         final trans = v['transmission_type'] as String;
