@@ -1,6 +1,6 @@
 // ────────────────────────────────────────────────────────────────────────────
 // features/dashboard/presentation/schedule_page.dart
-// Service schedule tab — uses Riverpod provider, no hardcoded UUID
+// Service schedule tab — uses Riverpod provider, supports edit & delete
 // ────────────────────────────────────────────────────────────────────────────
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/database/app_database.dart';
 
 class SchedulePage extends ConsumerWidget {
   const SchedulePage({super.key});
@@ -120,13 +121,13 @@ class SchedulePage extends ConsumerWidget {
 }
 
 // ── Schedule Card ─────────────────────────────────────────────────────────────
-class _ScheduleCard extends StatelessWidget {
+class _ScheduleCard extends ConsumerWidget {
   final Map<String, dynamic> schedule;
   final int index;
   const _ScheduleCard({required this.schedule, required this.index});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final nextDateStr = schedule['next_predicted_date'] as String? ?? '';
     final nextDate = DateTime.tryParse(nextDateStr);
     final daysLeft = nextDate != null
@@ -165,149 +166,178 @@ class _ScheduleCard extends StatelessWidget {
         ? DateFormat('dd MMM yyyy', 'id_ID').format(nextDate)
         : '-';
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: AppTheme.darkSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: urgencyColor.withOpacity(0.2)),
-        boxShadow: [
-          BoxShadow(
-            color: urgencyColor.withOpacity(0.04),
-            blurRadius: 16,
-          )
-        ],
-      ),
-      child: Column(
-        children: [
-          // Header
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: urgencyColor.withOpacity(0.08),
-              borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(20)),
+    return GestureDetector(
+      onTap: () => _showEditScheduleDialog(context, ref, schedule),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        decoration: BoxDecoration(
+          color: AppTheme.darkSurface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: urgencyColor.withOpacity(0.2)),
+          boxShadow: [
+            BoxShadow(
+              color: urgencyColor.withOpacity(0.04),
+              blurRadius: 16,
+            )
+          ],
+        ),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: urgencyColor.withOpacity(0.08),
+                borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(20)),
+              ),
+              child: Row(children: [
+                Expanded(
+                  child: Text(
+                    schedule['service_name'] as String? ??
+                        'Servis Berkala',
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: urgencyColor.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    urgencyLabel,
+                    style: TextStyle(
+                        color: urgencyColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ]),
             ),
-            child: Row(children: [
-              Expanded(
-                child: Text(
-                  schedule['service_name'] as String? ??
-                      'Servis Berkala',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15),
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: urgencyColor.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  urgencyLabel,
-                  style: TextStyle(
-                      color: urgencyColor,
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold),
-                ),
-              ),
-            ]),
-          ),
 
-          // Body
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Date + KM row
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    _InfoChip(
-                        icon: Icons.calendar_today,
-                        label: 'Target Tanggal',
-                        value: dateFormatted,
-                        color: urgencyColor),
-                    _InfoChip(
-                        icon: Icons.speed,
-                        label: 'Target KM',
-                        value: '$nextMil km',
-                        color: AppTheme.neonCyan),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // Progress bar (mileage)
-                if (intervalKm > 0 && lastMil > 0) ...[
+            // Body
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Date + KM row
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        'Progres: $lastMil → $nextMil km',
-                        style: const TextStyle(
-                            color: Colors.grey, fontSize: 11),
-                      ),
-                      Text(
-                        'Interval: ${intervalKm}km',
-                        style: const TextStyle(
-                            color: Colors.grey, fontSize: 11),
-                      ),
+                      _InfoChip(
+                          icon: Icons.calendar_today,
+                          label: 'Target Tanggal',
+                          value: dateFormatted,
+                          color: urgencyColor),
+                      _InfoChip(
+                          icon: Icons.speed,
+                          label: 'Target KM',
+                          value: '$nextMil km',
+                          color: AppTheme.neonCyan),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  LinearProgressIndicator(
-                    value: 1.0, // Shown as full (next target)
-                    minHeight: 4,
-                    borderRadius: BorderRadius.circular(4),
-                    backgroundColor:
-                        Colors.white.withOpacity(0.05),
-                    valueColor:
-                        AlwaysStoppedAnimation(urgencyColor),
-                  ),
                   const SizedBox(height: 12),
-                ],
 
-                // AI description
-                if (description.isNotEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color:
-                          Colors.white.withOpacity(0.03),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
+                  // Progress bar (mileage)
+                  if (intervalKm > 0 && lastMil > 0) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('🤖 ',
-                            style: TextStyle(fontSize: 14)),
-                        Expanded(
-                          child: Text(
-                            description,
-                            style: TextStyle(
-                                color: Colors.grey[300],
-                                fontSize: 12,
-                                height: 1.5),
-                          ),
+                        Text(
+                          'Progres: $lastMil → $nextMil km',
+                          style: const TextStyle(
+                              color: Colors.grey, fontSize: 11),
+                        ),
+                        Text(
+                          'Interval: ${intervalKm}km',
+                          style: const TextStyle(
+                              color: Colors.grey, fontSize: 11),
                         ),
                       ],
                     ),
+                    const SizedBox(height: 6),
+                    LinearProgressIndicator(
+                      value: 1.0, // Shown as full (next target)
+                      minHeight: 4,
+                      borderRadius: BorderRadius.circular(4),
+                      backgroundColor:
+                          Colors.white.withOpacity(0.05),
+                      valueColor:
+                          AlwaysStoppedAnimation(urgencyColor),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+
+                  // AI description
+                  if (description.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color:
+                            Colors.white.withOpacity(0.03),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
+                        children: [
+                          const Text('🤖 ',
+                              style: TextStyle(fontSize: 14)),
+                          Expanded(
+                            child: Text(
+                              description,
+                              style: TextStyle(
+                                  color: Colors.grey[300],
+                                  fontSize: 12,
+                                  height: 1.5),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 10),
+                  const Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Text('Ketuk untuk ubah / hapus jadwal',
+                          style: TextStyle(color: Colors.white24, fontSize: 9)),
+                    ],
                   ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     )
         .animate(delay: Duration(milliseconds: index * 60))
         .fadeIn(duration: 400.ms)
         .slideY(begin: 0.08);
+  }
+
+  void _showEditScheduleDialog(
+      BuildContext context, WidgetRef ref, Map<String, dynamic> schedule) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.darkSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => _EditScheduleForm(
+        schedule: schedule,
+        onSaved: () {
+          ref.invalidate(schedulesProvider);
+        },
+      ),
+    );
   }
 }
 
@@ -340,6 +370,333 @@ class _InfoChip extends StatelessWidget {
                   fontSize: 13)),
         ]),
       ],
+    );
+  }
+}
+
+// ── Edit Schedule Form Bottom Sheet ──────────────────────────────────────────
+class _EditScheduleForm extends ConsumerStatefulWidget {
+  final Map<String, dynamic> schedule;
+  final VoidCallback onSaved;
+
+  const _EditScheduleForm({
+    required this.schedule,
+    required this.onSaved,
+  });
+
+  @override
+  ConsumerState<_EditScheduleForm> createState() => _EditScheduleFormState();
+}
+
+class _EditScheduleFormState extends ConsumerState<_EditScheduleForm> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _nameCtrl;
+  late TextEditingController _descCtrl;
+  late TextEditingController _intervalKmCtrl;
+  late TextEditingController _intervalMonthsCtrl;
+  late TextEditingController _lastKmCtrl;
+  late DateTime _lastDate;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final s = widget.schedule;
+    _nameCtrl = TextEditingController(text: s['service_name'] as String? ?? '');
+    _descCtrl = TextEditingController(text: s['description'] as String? ?? '');
+    _intervalKmCtrl = TextEditingController(text: (s['interval_mileage'] as int? ?? 10000).toString());
+    _intervalMonthsCtrl = TextEditingController(text: (s['interval_months'] as int? ?? 6).toString());
+    _lastKmCtrl = TextEditingController(text: (s['last_service_mileage'] as int? ?? 0).toString());
+    _lastDate = DateTime.tryParse(s['last_service_date'] as String? ?? '') ?? DateTime.now();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _descCtrl.dispose();
+    _intervalKmCtrl.dispose();
+    _intervalMonthsCtrl.dispose();
+    _lastKmCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
+        left: 20,
+        right: 20,
+        top: 20,
+      ),
+      child: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Ubah Jadwal Servis',
+                    style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.delete_forever_rounded,
+                        color: AppTheme.neonOrange),
+                    onPressed: () async {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: AppTheme.darkSurface,
+                          title: const Text('Hapus Jadwal?',
+                              style: TextStyle(color: Colors.white)),
+                          content: const Text(
+                              'Jadwal servis ini akan dihapus permanen.',
+                              style: TextStyle(color: Colors.grey)),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Batal'),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppTheme.neonOrange,
+                                  foregroundColor: Colors.black),
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Hapus'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        await AppDatabase.deleteSchedule(
+                            widget.schedule['uuid']);
+                        widget.onSaved();
+                        if (context.mounted) Navigator.pop(context);
+                      }
+                    },
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Date picker
+              GestureDetector(
+                onTap: () async {
+                  final picked = await showDatePicker(
+                    context: context,
+                    initialDate: _lastDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime(2030),
+                    builder: (context, child) => Theme(
+                      data: Theme.of(context).copyWith(
+                        colorScheme: const ColorScheme.dark(
+                          primary: AppTheme.neonCyan,
+                          onPrimary: Colors.black,
+                          surface: AppTheme.darkSurface,
+                        ),
+                      ),
+                      child: child!,
+                    ),
+                  );
+                  if (picked != null) {
+                    setState(() => _lastDate = picked);
+                  }
+                },
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.04),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withOpacity(0.08)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Tanggal Servis Terakhir',
+                          style: TextStyle(color: Colors.white70, fontSize: 13)),
+                      Text(
+                        "${_lastDate.day}/${_lastDate.month}/${_lastDate.year}",
+                        style: const TextStyle(
+                            color: AppTheme.neonCyan,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+              _buildFieldLabel('Nama Servis'),
+              _buildTextFormField(
+                  _nameCtrl, 'Contoh: Ganti Oli Mesin, Servis Rem...',
+                  validator: (v) =>
+                      v?.isEmpty == true ? 'Nama servis wajib diisi' : null),
+
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFieldLabel('Interval Kilometer'),
+                        _buildTextFormField(_intervalKmCtrl, '10000',
+                            type: TextInputType.number,
+                            validator: (v) {
+                              if (v?.isEmpty == true) return 'Wajib';
+                              if (int.tryParse(v!) == null) return 'Angka saja';
+                              return null;
+                            }),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildFieldLabel('Interval Bulan'),
+                        _buildTextFormField(_intervalMonthsCtrl, '6',
+                            type: TextInputType.number,
+                            validator: (v) {
+                              if (v?.isEmpty == true) return 'Wajib';
+                              if (int.tryParse(v!) == null) return 'Angka saja';
+                              return null;
+                            }),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+              _buildFieldLabel('Kilometer Terakhir Ganti'),
+              _buildTextFormField(_lastKmCtrl, 'KM Terakhir',
+                  type: TextInputType.number,
+                  validator: (v) {
+                    if (v?.isEmpty == true) return 'Wajib';
+                    if (int.tryParse(v!) == null) return 'Angka saja';
+                    return null;
+                  }),
+
+              const SizedBox(height: 12),
+              _buildFieldLabel('Keterangan / Rekomendasi'),
+              _buildTextFormField(_descCtrl, 'Keterangan tambahan...',
+                  lines: 3),
+
+              const SizedBox(height: 24),
+              if (_isSaving)
+                const Center(
+                    child: CircularProgressIndicator(color: AppTheme.neonCyan))
+              else
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.neonCyan,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14)),
+                    ),
+                    onPressed: () async {
+                      if (_formKey.currentState?.validate() == true) {
+                        setState(() => _isSaving = true);
+                        final km = int.parse(_intervalKmCtrl.text);
+                        final months = int.parse(_intervalMonthsCtrl.text);
+                        final lastKm = int.parse(_lastKmCtrl.text);
+
+                        final updated = {
+                          'uuid': widget.schedule['uuid'],
+                          'vehicle_uuid': widget.schedule['vehicle_uuid'],
+                          'service_name': _nameCtrl.text.trim(),
+                          'description': _descCtrl.text.trim(),
+                          'interval_mileage': km,
+                          'interval_months': months,
+                          'last_service_mileage': lastKm,
+                          'last_service_date': _lastDate.toIso8601String(),
+                          'next_predicted_date': _lastDate.add(Duration(days: months * 30)).toIso8601String(),
+                          'next_predicted_mileage': lastKm + km,
+                          'is_enabled': widget.schedule['is_enabled'] ?? 1,
+                        };
+
+                        await AppDatabase.insertOrUpdateSchedule(updated);
+                        widget.onSaved();
+
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                        }
+                      }
+                    },
+                    child: const Text('Simpan Jadwal',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFieldLabel(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6, left: 4),
+      child: Text(
+        text,
+        style: const TextStyle(
+            color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+      ),
+    );
+  }
+
+  Widget _buildTextFormField(
+    TextEditingController controller,
+    String hint, {
+    TextInputType type = TextInputType.text,
+    int lines = 1,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      keyboardType: type,
+      maxLines: lines,
+      style: const TextStyle(color: Colors.white, fontSize: 13),
+      validator: validator,
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white24, fontSize: 13),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.04),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.neonCyan),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.neonOrange),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppTheme.neonOrange),
+        ),
+      ),
     );
   }
 }

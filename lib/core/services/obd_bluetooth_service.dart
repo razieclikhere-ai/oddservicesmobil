@@ -64,6 +64,12 @@ class ObdBluetoothService {
   Future<void> loadLastSavedData([String? vehicleUuid]) async {
     final uuid = vehicleUuid ?? activeVehicleUuid;
     try {
+      final vehicle = await AppDatabase.getVehicle(uuid);
+      if (vehicle != null) {
+        currentOdometer = vehicle['current_mileage'] as int? ?? 0;
+        activeVehicleName = vehicle['name'] as String? ?? activeVehicleName;
+      }
+
       final list = await AppDatabase.getScans(uuid);
       if (list.isNotEmpty) {
         final last = list.first;
@@ -73,12 +79,15 @@ class ObdBluetoothService {
         speed          = (last['speed']           as num?)?.toDouble() ?? 0.0;
         fuelTrim       = (last['fuel_trim']       as num?)?.toDouble() ?? 0.0;
         dtcCodes       = last['dtc_codes']        as String? ?? '';
-        currentOdometer = last['mileage']         as int?    ?? 0;
-        if (!_stateController.isClosed) {
-          _stateController.add(_currentState);
+        final scanMileage = last['mileage'] as int? ?? 0;
+        if (scanMileage > currentOdometer) {
+          currentOdometer = scanMileage;
         }
-        _log.d('OBD: Loaded last saved scan for $uuid');
       }
+      if (!_stateController.isClosed) {
+        _stateController.add(_currentState);
+      }
+      _log.d('OBD: Loaded last saved scan for $uuid, odometer: $currentOdometer');
     } catch (e) {
       _log.w('OBD: Could not load last saved data: $e');
     }
@@ -325,20 +334,31 @@ class ObdBluetoothService {
       if (clean.length < 4) continue;
 
       try {
-        if (clean.startsWith('410C') && clean.length >= 8) {
-          final a = int.parse(clean.substring(4, 6), radix: 16);
-          final b = int.parse(clean.substring(6, 8), radix: 16);
+        final idxRpm = clean.indexOf('410C');
+        if (idxRpm != -1 && clean.length >= idxRpm + 8) {
+          final a = int.parse(clean.substring(idxRpm + 4, idxRpm + 6), radix: 16);
+          final b = int.parse(clean.substring(idxRpm + 6, idxRpm + 8), radix: 16);
           rpm = (a * 256 + b) / 4.0;
-        } else if (clean.startsWith('410D') && clean.length >= 6) {
-          speed = int.parse(clean.substring(4, 6), radix: 16).toDouble();
-        } else if (clean.startsWith('4105') && clean.length >= 6) {
-          coolantTemp =
-              (int.parse(clean.substring(4, 6), radix: 16) - 40).toDouble();
-        } else if (clean.startsWith('4106') && clean.length >= 6) {
-          fuelTrim =
-              (int.parse(clean.substring(4, 6), radix: 16) - 128) * 100 / 128;
-        } else if (clean.startsWith('43') && clean.length >= 6) {
-          final data = clean.substring(2);
+        }
+
+        final idxSpeed = clean.indexOf('410D');
+        if (idxSpeed != -1 && clean.length >= idxSpeed + 6) {
+          speed = int.parse(clean.substring(idxSpeed + 4, idxSpeed + 6), radix: 16).toDouble();
+        }
+
+        final idxCoolant = clean.indexOf('4105');
+        if (idxCoolant != -1 && clean.length >= idxCoolant + 6) {
+          coolantTemp = (int.parse(clean.substring(idxCoolant + 4, idxCoolant + 6), radix: 16) - 40).toDouble();
+        }
+
+        final idxFuel = clean.indexOf('4106');
+        if (idxFuel != -1 && clean.length >= idxFuel + 6) {
+          fuelTrim = (int.parse(clean.substring(idxFuel + 4, idxFuel + 6), radix: 16) - 128) * 100 / 128;
+        }
+
+        final idxDtc = clean.indexOf('43');
+        if (idxDtc != -1 && clean.length >= idxDtc + 6) {
+          final data = clean.substring(idxDtc + 2);
           dtcCodes = (data.length >= 4 && data.substring(0, 4) != '0000')
               ? 'P${data.substring(0, 4)}'
               : '';
