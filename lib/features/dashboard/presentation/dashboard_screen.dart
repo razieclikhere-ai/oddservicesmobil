@@ -176,14 +176,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 _HealthRingCard(score: health, odometer: obd.simulatedOdometer),
                 const SizedBox(height: 20),
 
-                // ── Live OBD mini-tiles ───────────────────────────────────────
-                if (isLive) ...[
-                  _SectionHeader(title: 'Live Sensor OBD-II',
-                      trailing: state == ObdConnectionState.simulating ? 'SIMULASI' : 'LIVE'),
-                  const SizedBox(height: 10),
-                  _ObdSensorGrid(obd: obd),
-                  const SizedBox(height: 20),
-                ],
+                // ── OBD sensor tiles (always visible, showing live or last memory scan) ──
+                _SectionHeader(
+                  title: state == ObdConnectionState.connected ? 'Live Sensor OBD-II' : 'Sensor OBD-II (Data Terakhir)',
+                  trailing: state == ObdConnectionState.connected ? 'LIVE' : 'MEMORI',
+                ),
+                const SizedBox(height: 10),
+                _ObdSensorGrid(obd: obd),
+                const SizedBox(height: 20),
 
                 // ── Upcoming service ──────────────────────────────────────────
                 _SectionHeader(title: 'Jadwal Servis Berikutnya'),
@@ -301,13 +301,15 @@ class _ObdLivePageState extends State<_ObdLivePage> {
   Widget build(BuildContext context) {
     final obd = ObdBluetoothService.instance;
     final state = obd.currentState;
-    final isLive = state == ObdConnectionState.connected || state == ObdConnectionState.simulating;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
       appBar: AppBar(
         backgroundColor: AppTheme.darkSurface,
-        title: const Text('Live OBD Monitor', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text(
+          state == ObdConnectionState.connected ? 'Live OBD Monitor' : 'OBD Monitor (Data Terakhir)',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
@@ -315,9 +317,7 @@ class _ObdLivePageState extends State<_ObdLivePage> {
           ),
         ],
       ),
-      body: isLive
-          ? _buildLiveView(obd)
-          : _buildDisconnectedView(),
+      body: _buildLiveView(obd),
     );
   }
 

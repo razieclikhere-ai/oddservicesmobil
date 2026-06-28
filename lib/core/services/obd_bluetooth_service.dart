@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter_blue_classic/flutter_blue_classic.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -9,11 +8,15 @@ import '../database/app_database.dart';
 import 'ai_prediction_service.dart';
 import 'notification_service.dart';
 
-enum ObdConnectionState { disconnected, scanning, connecting, connected, simulating }
+enum ObdConnectionState { disconnected, scanning, connecting, connected }
 
 class ObdBluetoothService {
   static final ObdBluetoothService instance = ObdBluetoothService._internal();
-  ObdBluetoothService._internal();
+  
+  ObdBluetoothService._internal() {
+    // Load the last saved OBD session from database immediately on start
+    loadLastSavedData();
+  }
 
   final _stateController = StreamController<ObdConnectionState>.broadcast();
   Stream<ObdConnectionState> get connectionStateStream => _stateController.stream;
@@ -26,14 +29,12 @@ class ObdBluetoothService {
   StreamSubscription<BluetoothDevice>? _scanSubscription;
   StreamSubscription<Uint8List>? _dataSubscription;
   Timer? _pollingTimer;
-  Timer? _simulationTimer;
   Timer? _dbWriteTimer;
-  final _random = Random();
   bool _isRunning = false;
 
   // ── Live sensor values ────────────────────────────────────────────────────
   double coolantTemp    = 45.0;
-  double batteryVoltage = 14.1;
+  double batteryVoltage = 12.0;
   double rpm            = 0.0;
   double speed          = 0.0;
   double fuelTrim       = 0.0;
@@ -43,6 +44,27 @@ class ObdBluetoothService {
   void _updateState(ObdConnectionState s) {
     _currentState = s;
     _stateController.add(s);
+  }
+
+  // ── Load Last Saved Data from Database ─────────────────────────────────────
+
+  Future<void> loadLastSavedData() async {
+    try {
+      final list = await AppDatabase.getScans('default-honda-jazz-ge8');
+      if (list.isNotEmpty) {
+        final last = list.first;
+        coolantTemp = (last['coolant_temp'] as num?)?.toDouble() ?? 45.0;
+        batteryVoltage = (last['battery_voltage'] as num?)?.toDouble() ?? 12.0;
+        rpm = (last['rpm'] as num?)?.toDouble() ?? 0.0;
+        speed = (last['speed'] as num?)?.toDouble() ?? 0.0;
+        fuelTrim = (last['fuel_trim'] as num?)?.toDouble() ?? 0.0;
+        dtcCodes = last['dtc_codes'] as String? ?? '';
+        simulatedOdometer = last['mileage'] as int? ?? 150000;
+        
+        // Trigger UI stream update
+        _stateController.add(_currentState);
+      }
+    } catch (_) {}
   }
 
   // ── Connection flow ────────────────────────────────────────────────────────
@@ -62,7 +84,7 @@ class ObdBluetoothService {
 
     if (statuses[Permission.bluetoothScan]?.isDenied == true ||
         statuses[Permission.bluetoothConnect]?.isDenied == true) {
-      startSimulationMode();
+      _setDisconnected();
       return;
     }
 
@@ -108,10 +130,10 @@ class ObdBluetoothService {
       await Future.delayed(const Duration(seconds: 12));
       if (_currentState == ObdConnectionState.scanning) {
         _flutterBlueClassic.stopScan();
-        startSimulationMode();
+        _setDisconnected();
       }
     } catch (e) {
-      startSimulationMode();
+      _setDisconnected();
     }
   }
 
@@ -132,40 +154,29 @@ class ObdBluetoothService {
 
         _startLiveDataReader();
       } else {
-        startSimulationMode();
+        _setDisconnected();
       }
     } catch (e) {
-      startSimulationMode();
+      _setDisconnected();
     }
   }
 
-  void startSimulationMode() {
+  void _setDisconnected() {
     _cleanupHardware();
-    _isRunning = true;
-    _updateState(ObdConnectionState.simulating);
-
-    NotificationService.showInstantNotification(
-      id: 1,
-      title: '🔌 Mode Simulasi OBD Aktif',
-      body: 'Tidak ada adaptor OBD Bluetooth Classic terdeteksi. Data disimulasikan.',
-    );
-
-    _simulationTimer = Timer.periodic(const Duration(seconds: 2), (_) => _simulateTick());
-    _dbWriteTimer = Timer.periodic(const Duration(seconds: 30), (_) => _saveScanRecord());
+    _isRunning = false;
+    _updateState(ObdConnectionState.disconnected);
+    loadLastSavedData(); // Ensure the last saved scan shows up when offline
   }
 
   void disconnect() {
-    _isRunning = false;
-    _cleanupHardware();
-    _simulationTimer?.cancel();
-    _dbWriteTimer?.cancel();
-    _updateState(ObdConnectionState.disconnected);
+    _setDisconnected();
   }
 
   void _cleanupHardware() {
     _scanSubscription?.cancel();
     _dataSubscription?.cancel();
     _pollingTimer?.cancel();
+    _dbWriteTimer?.cancel();
     try {
       _connection?.dispose();
     } catch (_) {}
@@ -193,9 +204,9 @@ class ObdBluetoothService {
           _parseObdResponse(response);
           _rxBuffer.clear();
         }
-      }, onError: (_) => startSimulationMode(), onDone: () => startSimulationMode());
+      }, onError: (_) => _setDisconnected(), onDone: () => _setDisconnected());
     } else {
-      startSimulationMode();
+      _setDisconnected();
       return;
     }
 
@@ -305,40 +316,11 @@ class ObdBluetoothService {
     }
   }
 
-  // ── Simulation tick ────────────────────────────────────────────────────────
-
-  void _simulateTick() {
-    if (coolantTemp < 90) {
-      coolantTemp += _random.nextDouble() * 1.2;
-    } else {
-      coolantTemp = 87 + _random.nextDouble() * 6;
-    }
-
-    final driving = _random.nextDouble() > 0.4;
-    rpm = driving ? 1200 + _random.nextDouble() * 2000 : 750 + _random.nextDouble() * 100;
-    speed = driving ? 20 + _random.nextDouble() * 80 : 0;
-    batteryVoltage = driving ? 13.8 + _random.nextDouble() * 0.5 : 12.2 + _random.nextDouble() * 0.4;
-    fuelTrim = -3.0 + _random.nextDouble() * 6.0;
-    simulatedOdometer += (speed * (2 / 3600)).toInt();
-
-    if (_random.nextDouble() < 0.05) {
-      batteryVoltage = 11.5 + _random.nextDouble() * 0.4;
-      dtcCodes = _random.nextBool() ? 'P0171' : 'P0300';
-      NotificationService.showInstantNotification(
-        id: 2,
-        title: '⚠️ Peringatan Sensor OBD',
-        body: dtcCodes == 'P0171'
-            ? 'P0171 – Campuran bahan bakar terlalu kurus. Cek filter udara.'
-            : 'P0300 – Misfire terdeteksi. Cek busi dan koil pengapian.',
-      );
-    } else {
-      dtcCodes = '';
-    }
-  }
-
-  // ── Database + AI ──────────────────────────────────────────────────────────
+  // ── Database Save ──────────────────────────────────────────────────────────
 
   Future<void> _saveScanRecord() async {
+    if (_currentState != ObdConnectionState.connected) return;
+
     await AppDatabase.insertScan({
       'uuid': const Uuid().v4(),
       'vehicle_uuid': 'default-honda-jazz-ge8',
@@ -349,7 +331,7 @@ class ObdBluetoothService {
       'speed': speed,
       'fuel_trim': fuelTrim,
       'dtc_codes': dtcCodes,
-      'notes': _currentState == ObdConnectionState.connected ? 'OBD-II Bluetooth Classic live data' : 'Simulated live data',
+      'notes': 'OBD-II Bluetooth Classic live data',
       'mileage': simulatedOdometer,
     });
 
