@@ -33,42 +33,71 @@ jobs:
         flutter create . --org com.smart.obd --project-name smart_obd_assistant
         rm -rf test
 
-    - name: Patch Kotlin Gradle Plugin version to 2.0.21
+    # ── Fix 1: Upgrade Kotlin to 2.2.0 to match kotlin-stdlib 2.2.20 ──────────
+    - name: Patch Kotlin version to 2.2.0
       run: |
-        python3 -c "
+        python3 - <<'PYEOF'
         import os, re
-        if os.path.exists('android/settings.gradle'):
-            f=open('android/settings.gradle'); c=f.read(); f.close()
-            c=re.sub(r'id\s+[\"\']org\.jetbrains\.kotlin\.android[\"\']\s+version\s+[\"\'][^\"\']+[\"\']', 'id \"org.jetbrains.kotlin.android\" version \"2.0.21\"', c)
-            f=open('android/settings.gradle', 'w'); f.write(c); f.close()
-        if os.path.exists('android/build.gradle'):
-            f=open('android/build.gradle'); c=f.read(); f.close()
-            c=re.sub(r'ext\.kotlin_version\s*=\s*[\"\'][^\"\']+[\"\']', \"ext.kotlin_version = '2.0.21'\", c)
-            f=open('android/build.gradle', 'w'); f.write(c); f.close()
-        "
+
+        # settings.gradle  (new-style plugins block)
+        p = 'android/settings.gradle'
+        if os.path.exists(p):
+            c = open(p).read()
+            c = re.sub(
+                r'(id\s+["\']org\.jetbrains\.kotlin\.android["\']\s+version\s+["\'])[^"\']+(["\'])',
+                r'\g<1>2.2.0\2', c)
+            open(p, 'w').write(c)
+            print("settings.gradle patched:", c[:400])
+
+        # build.gradle  (legacy ext.kotlin_version)
+        p = 'android/build.gradle'
+        if os.path.exists(p):
+            c = open(p).read()
+            c = re.sub(
+                r"ext\.kotlin_version\s*=\s*['\"][^'\"]+['\"]",
+                "ext.kotlin_version = '2.2.0'", c)
+            open(p, 'w').write(c)
+            print("build.gradle patched")
+        PYEOF
+
+    # ── Fix 2: Force compileSdk 36 in app/build.gradle ─────────────────────────
+    # Flutter 3.24 uses `flutter.compileSdkVersion` (a variable), not a literal.
+    # We append an android{} override block that wins over the flutter variable.
+    - name: Force compileSdk = 36 in app/build.gradle
+      run: |
+        python3 - <<'PYEOF'
+        import os, re
+
+        p = 'android/app/build.gradle'
+        if not os.path.exists(p):
+            print("app/build.gradle not found, skipping")
+            exit(0)
+
+        c = open(p).read()
+
+        # 1. Replace any literal compileSdk / compileSdkVersion numbers
+        c = re.sub(r'compileSdk\s*=\s*\d+', 'compileSdk = 36', c)
+        c = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 36', c)
+
+        # 2. Replace flutter.compileSdkVersion variable reference
+        c = c.replace('flutter.compileSdkVersion', '36')
+
+        # 3. JVM target upgrade
+        c = c.replace('sourceCompatibility JavaVersion.VERSION_1_8',
+                       'sourceCompatibility JavaVersion.VERSION_17')
+        c = c.replace('targetCompatibility JavaVersion.VERSION_1_8',
+                       'targetCompatibility JavaVersion.VERSION_17')
+        c = c.replace("jvmTarget = '1.8'", "jvmTarget = '17'")
+        c = c.replace('jvmTarget = "1.8"',  'jvmTarget = "17"')
+
+        open(p, 'w').write(c)
+        print("app/build.gradle patched successfully")
+        print("=== First 600 chars ===")
+        print(c[:600])
+        PYEOF
 
     - name: Copy AndroidManifest with Bluetooth permissions
       run: cp assets/android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-
-    - name: Patch android/build.gradle for legacy plugins
-      run: |
-        echo -e "\next.flutter = [\n    compileSdkVersion: 36,\n    minSdkVersion: 21,\n    targetSdkVersion: 34\n]" >> android/build.gradle
-
-    - name: Patch app-level build.gradle for JVM 17 and compileSdk 36
-      run: |
-        python3 -c "
-        import os, re
-        path = 'android/app/build.gradle'
-        if os.path.exists(path):
-            f=open(path); c=f.read(); f.close()
-            c = c.replace('sourceCompatibility JavaVersion.VERSION_1_8', 'sourceCompatibility JavaVersion.VERSION_17')
-            c = c.replace('targetCompatibility JavaVersion.VERSION_1_8', 'targetCompatibility JavaVersion.VERSION_17')
-            c = c.replace(\"jvmTarget = '1.8'\", \"jvmTarget = '17'\")
-            c = c.replace('jvmTarget = \"1.8\"', 'jvmTarget = \"17\"')
-            c = re.sub(r'compileSdk\s*=?\s*\d+', 'compileSdk = 36', c)
-            c = re.sub(r'compileSdkVersion\s*\d+', 'compileSdkVersion 36', c)
-            f=open(path, 'w'); f.write(c); f.close()
-        "
 
     - name: Get Dependencies
       run: flutter pub get
