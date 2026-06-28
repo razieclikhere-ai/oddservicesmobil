@@ -1,8 +1,10 @@
 // ────────────────────────────────────────────────────────────────────────────
 // features/dashboard/presentation/obd_live_page.dart
-// Real-time OBD sensor monitor tab
+// Real-time OBD-II sensor dashboard — responsive, reactive, auto-updating
 // ────────────────────────────────────────────────────────────────────────────
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../core/theme/app_theme.dart';
@@ -17,12 +19,38 @@ class ObdLivePage extends ConsumerStatefulWidget {
 }
 
 class _ObdLivePageState extends ConsumerState<ObdLivePage> {
+  Timer? _ticker;
+  StreamSubscription<ObdConnectionState>? _stateSub;
+
+  @override
+  void initState() {
+    super.initState();
+    // Refresh the UI periodically for smooth real-time ticks
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+
+    _stateSub = ObdBluetoothService.instance.connectionStateStream.listen((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    _stateSub?.cancel();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final connectionState = ref.watch(obdConnectionStateProvider);
     final obd = ObdBluetoothService.instance;
-
     final state = connectionState.valueOrNull ?? obd.currentState;
+
+    final isOffline = state == ObdConnectionState.disconnected &&
+        obd.rpm == 0 &&
+        obd.batteryVoltage == 0;
 
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
@@ -42,9 +70,7 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
           ),
         ],
       ),
-      body: state == ObdConnectionState.disconnected &&
-              obd.rpm == 0 &&
-              obd.batteryVoltage == 0
+      body: isOffline
           ? _buildDisconnectedView()
           : _buildLiveView(obd, state),
     );
@@ -52,42 +78,47 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
 
   Widget _buildDisconnectedView() {
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.bluetooth_disabled,
-              size: 72, color: Colors.grey),
-          const SizedBox(height: 16),
-          const Text(
-            'Tidak Ada Perangkat OBD Terhubung',
-            style: TextStyle(
-                color: Colors.white,
-                fontSize: 17,
-                fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Tekan tombol di bawah untuk memulai scanning Bluetooth',
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 28),
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.neonCyan,
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(
-                  horizontal: 28, vertical: 14),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.bluetooth_disabled,
+                size: 80, color: Colors.grey)
+                .animate(onPlay: (c) => c.repeat(reverse: true))
+                .scale(begin: const Offset(0.9, 0.9), end: const Offset(1.1, 1.1), duration: 1500.ms),
+            const SizedBox(height: 20),
+            const Text(
+              'OBD Belum Terhubung',
+              style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold),
             ),
-            icon: const Icon(Icons.bluetooth_searching),
-            label: const Text('Scan & Hubungkan OBD',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            onPressed: () =>
-                ObdBluetoothService.instance.connectToObd(),
-          ),
-        ],
+            const SizedBox(height: 8),
+            Text(
+              'Hubungkan adapter ELM327 Bluetooth untuk menampilkan data sensor real-time secara dinamis.',
+              style: TextStyle(color: Colors.grey[500], fontSize: 13, height: 1.4),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonCyan,
+                foregroundColor: Colors.black,
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+              ),
+              icon: const Icon(Icons.bluetooth_searching),
+              label: const Text('Hubungkan OBD Sekarang',
+                  style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () =>
+                  ObdBluetoothService.instance.connectToObd(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -97,10 +128,10 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
       padding: const EdgeInsets.all(16),
       child: Column(
         children: [
-          // Speedometer + RPM
+          // Circular Gauges: Speed & RPM
           Row(children: [
             Expanded(
-              child: _GaugeCard(
+              child: _CircularGauge(
                 label: 'Kecepatan',
                 value: obd.speed.toStringAsFixed(0),
                 unit: 'km/h',
@@ -112,27 +143,26 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _GaugeCard(
-                label: 'RPM',
+              child: _CircularGauge(
+                label: 'RPM Mesin',
                 value: obd.rpm.toStringAsFixed(0),
                 unit: 'rpm',
-                max: 6000,
+                max: 7000,
                 current: obd.rpm,
                 color: AppTheme.neonOrange,
                 icon: Icons.rotate_right,
               ),
             ),
           ]),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
-          // Coolant + Battery
+          // Linear Sensor Cards: Coolant & Battery
           Row(children: [
             Expanded(
-              child: _GaugeCard(
-                label: 'Suhu Pendingin',
-                value: obd.coolantTemp.toStringAsFixed(1),
-                unit: '°C',
-                max: 130,
+              child: _LinearSensorCard(
+                label: 'Radiator (Coolant)',
+                value: '${obd.coolantTemp.toStringAsFixed(1)} °C',
+                max: 120,
                 current: obd.coolantTemp,
                 color: obd.coolantTemp > 100
                     ? AppTheme.neonOrange
@@ -142,13 +172,12 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
             ),
             const SizedBox(width: 12),
             Expanded(
-              child: _GaugeCard(
+              child: _LinearSensorCard(
                 label: 'Tegangan Aki',
-                value: obd.batteryVoltage.toStringAsFixed(2),
-                unit: 'V',
+                value: '${obd.batteryVoltage.toStringAsFixed(2)} V',
                 max: 16,
-                current: obd.batteryVoltage,
                 min: 10,
+                current: obd.batteryVoltage,
                 color: obd.batteryVoltage < 12.0
                     ? AppTheme.neonOrange
                     : AppTheme.neonCyan,
@@ -156,12 +185,12 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
               ),
             ),
           ]),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
-          // Fuel trim
+          // Details List
           _DetailTile(
             icon: FontAwesomeIcons.gasPump,
-            label: 'Fuel Trim',
+            label: 'Short-term Fuel Trim',
             value:
                 '${obd.fuelTrim > 0 ? '+' : ''}${obd.fuelTrim.toStringAsFixed(2)}%',
             status:
@@ -170,30 +199,28 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
                 ? AppTheme.neonOrange
                 : AppTheme.neonGreen,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
-          // DTC codes
           _DetailTile(
             icon: Icons.report_problem_rounded,
-            label: 'Kode DTC',
+            label: 'Status DTC (Malfungsi)',
             value: obd.dtcCodes.isEmpty
-                ? 'Tidak Ada Error'
+                ? 'Tidak Ada Kode Kerusakan'
                 : obd.dtcCodes,
-            status: obd.dtcCodes.isEmpty ? 'Normal' : 'ERROR',
+            status: obd.dtcCodes.isEmpty ? 'Sehat' : 'WARNING',
             statusColor: obd.dtcCodes.isEmpty
                 ? AppTheme.neonGreen
                 : AppTheme.neonOrange,
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 12),
 
-          // Odometer
           _DetailTile(
             icon: Icons.map_rounded,
-            label: 'Odometer',
+            label: 'Odometer Kendaraan',
             value: '${obd.currentOdometer} km',
             status: state == ObdConnectionState.connected
-                ? 'Live'
-                : 'Terakhir',
+                ? 'Aktif'
+                : 'Memori',
             statusColor: state == ObdConnectionState.connected
                 ? AppTheme.neonCyan
                 : Colors.grey,
@@ -214,22 +241,18 @@ class _ConnectionPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (color, label) = switch (state) {
-      ObdConnectionState.connected => (AppTheme.neonGreen, 'BT LIVE'),
-      ObdConnectionState.simulating =>
-        (AppTheme.neonYellow, 'SIMULASI'),
-      ObdConnectionState.scanning =>
-        (AppTheme.neonCyan, 'SCANNING...'),
-      ObdConnectionState.connecting =>
-        (AppTheme.neonCyan, 'CONNECTING...'),
+      ObdConnectionState.connected => (AppTheme.neonGreen, 'LIVE'),
+      ObdConnectionState.simulating => (AppTheme.neonYellow, 'SIMULASI'),
+      ObdConnectionState.scanning => (AppTheme.neonCyan, 'PINDAI...'),
+      ObdConnectionState.connecting => (AppTheme.neonCyan, 'KONEKSI...'),
       _ => (Colors.grey, 'OFFLINE'),
     };
     return Container(
-      padding:
-          const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withOpacity(0.35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -253,13 +276,14 @@ class _ConnectionPill extends StatelessWidget {
   }
 }
 
-class _GaugeCard extends StatelessWidget {
+class _CircularGauge extends StatelessWidget {
   final String label, value, unit;
   final double max, current;
   final double min;
   final Color color;
   final IconData icon;
-  const _GaugeCard({
+
+  const _CircularGauge({
     required this.label,
     required this.value,
     required this.unit,
@@ -274,44 +298,133 @@ class _GaugeCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final ratio = ((current - min) / (max - min)).clamp(0.0, 1.0);
     return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: color.withOpacity(0.12)),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.03),
+            blurRadius: 16,
+            spreadRadius: 2,
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: const TextStyle(
+                    color: Colors.grey,
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: 110,
+            height: 110,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: CircularProgressIndicator(
+                    value: ratio,
+                    strokeWidth: 8,
+                    backgroundColor: Colors.white.withOpacity(0.03),
+                    valueColor: AlwaysStoppedAnimation(color),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      value,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      unit,
+                      style: TextStyle(
+                          color: Colors.grey[500],
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _LinearSensorCard extends StatelessWidget {
+  final String label, value;
+  final double max, current;
+  final double min;
+  final Color color;
+  final IconData icon;
+
+  const _LinearSensorCard({
+    required this.label,
+    required this.value,
+    required this.max,
+    required this.current,
+    required this.color,
+    required this.icon,
+    this.min = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final ratio = ((current - min) / (max - min)).clamp(0.0, 1.0);
+    return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.2)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: color.withOpacity(0.12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 8),
-            Text(label,
-                style: const TextStyle(
-                    color: Colors.grey, fontSize: 12)),
-          ]),
+          Row(
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+            ],
+          ),
           const SizedBox(height: 12),
-          RichText(
-            text: TextSpan(children: [
-              TextSpan(
-                  text: value,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold)),
-              TextSpan(
-                  text: ' $unit',
-                  style: TextStyle(
-                      color: Colors.grey[500], fontSize: 12)),
-            ]),
+          Text(
+            value,
+            style: const TextStyle(
+                color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           LinearProgressIndicator(
             value: ratio,
             minHeight: 4,
             borderRadius: BorderRadius.circular(4),
-            backgroundColor:
-                Colors.white.withOpacity(0.05),
+            backgroundColor: Colors.white.withOpacity(0.04),
             valueColor: AlwaysStoppedAnimation(color),
           ),
         ],
@@ -338,9 +451,8 @@ class _DetailTile extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
-        borderRadius: BorderRadius.circular(16),
-        border:
-            Border.all(color: Colors.white.withOpacity(0.05)),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withOpacity(0.04)),
       ),
       child: Row(children: [
         Container(
@@ -358,20 +470,18 @@ class _DetailTile extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(label,
-                  style: const TextStyle(
-                      color: Colors.grey, fontSize: 12)),
-              const SizedBox(height: 2),
+                  style: const TextStyle(color: Colors.grey, fontSize: 11)),
+              const SizedBox(height: 3),
               Text(value,
                   style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 15)),
+                      fontSize: 14)),
             ],
           ),
         ),
         Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: 10, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           decoration: BoxDecoration(
             color: statusColor.withOpacity(0.12),
             borderRadius: BorderRadius.circular(8),
@@ -379,7 +489,7 @@ class _DetailTile extends StatelessWidget {
           child: Text(status,
               style: TextStyle(
                   color: statusColor,
-                  fontSize: 11,
+                  fontSize: 10,
                   fontWeight: FontWeight.bold)),
         ),
       ]),
