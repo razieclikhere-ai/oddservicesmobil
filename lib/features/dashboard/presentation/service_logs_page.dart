@@ -256,7 +256,7 @@ class _ServiceLogsPageState extends ConsumerState<ServiceLogsPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (_) => _ServiceLogForm(
+      builder: (_) => ServiceLogForm(
         vehicleUuid: vehicleUuid,
         logToEdit: logToEdit,
         onSaved: () {
@@ -269,22 +269,22 @@ class _ServiceLogsPageState extends ConsumerState<ServiceLogsPage> {
 }
 
 // ── Service Log Form Modal Bottom Sheet ───────────────────────────────────────
-class _ServiceLogForm extends ConsumerStatefulWidget {
+class ServiceLogForm extends ConsumerStatefulWidget {
   final String vehicleUuid;
   final Map<String, dynamic>? logToEdit;
   final VoidCallback onSaved;
 
-  const _ServiceLogForm({
+  const ServiceLogForm({
     required this.vehicleUuid,
     required this.onSaved,
     this.logToEdit,
   });
 
   @override
-  ConsumerState<_ServiceLogForm> createState() => _ServiceLogFormState();
+  ConsumerState<ServiceLogForm> createState() => _ServiceLogFormState();
 }
 
-class _ServiceLogFormState extends ConsumerState<_ServiceLogForm> {
+class _ServiceLogFormState extends ConsumerState<ServiceLogForm> {
   final _formKey = GlobalKey<FormState>();
   late DateTime _selectedDate;
   late TextEditingController _typeCtrl;

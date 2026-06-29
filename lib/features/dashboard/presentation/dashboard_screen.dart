@@ -64,6 +64,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final state = obd.currentState;
     final schedulesAsync = ref.watch(schedulesProvider);
     final recentScansAsync = ref.watch(recentScansProvider);
+    final serviceLogsAsync = ref.watch(serviceLogsProvider);
     final activeUuid = ref.watch(activeVehicleUuidProvider);
     final vehiclesAsync = ref.watch(vehiclesProvider);
     final inspectionProblems = ref.watch(inspectionProblemsCountProvider).valueOrNull ?? 0;
@@ -105,24 +106,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Sensor tiles
-                GestureDetector(
-                  onTap: () => ref.read(dashboardTabIndexProvider.notifier).state = 1,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _SectionHeader(
-                        title: state == ObdConnectionState.connected
-                            ? 'Live Sensor OBD-II'
-                            : 'Sensor OBD-II (Data Terakhir)',
-                        trailing: state == ObdConnectionState.connected
-                            ? 'LIVE'
-                            : 'MEMORI',
-                      ),
-                      const SizedBox(height: 10),
-                      _ObdSensorGrid(obd: obd),
-                    ],
-                  ),
+                // Diagnostic Quick Panel
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const _SectionHeader(
+                      title: 'Status Diagnostik AI',
+                    ),
+                    const SizedBox(height: 10),
+                    _DiagnosticStatusPanel(
+                      obd: obd,
+                      inspectionProblems: inspectionProblems,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 20),
 
@@ -132,7 +128,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _SectionHeader(title: 'Jadwal Servis Berikutnya'),
+                      _SectionHeader(title: 'Jadwal Servis Berikutnya (Prediksi AI)'),
                       const SizedBox(height: 10),
                       schedulesAsync.when(
                         loading: () => const SizedBox(
@@ -148,6 +144,43 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                     ],
                   ),
+                ),
+                const SizedBox(height: 20),
+
+                // Recent Service Logs
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Catatan Servis Terakhir',
+                            style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold)),
+                        TextButton(
+                          onPressed: () => context.push('/service-logs'),
+                          child: const Text('Lihat Semua',
+                              style: TextStyle(
+                                  color: AppTheme.neonCyan,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    serviceLogsAsync.when(
+                      loading: () => const SizedBox(
+                          height: 80,
+                          child: Center(
+                              child: CircularProgressIndicator(
+                                  color: AppTheme.neonCyan,
+                                  strokeWidth: 2))),
+                      error: (_, __) => const SizedBox.shrink(),
+                      data: (logs) => _RecentServiceLogsDashboardList(logs: logs),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 20),
 
@@ -703,108 +736,169 @@ class _HealthRingCard extends StatelessWidget {
     }
   }
 
-class _ObdSensorGrid extends StatelessWidget {
+class _DiagnosticStatusPanel extends StatelessWidget {
   final ObdBluetoothService obd;
-  const _ObdSensorGrid({required this.obd});
+  final int inspectionProblems;
+  const _DiagnosticStatusPanel({required this.obd, required this.inspectionProblems});
 
   @override
   Widget build(BuildContext context) {
-    final tiles = [
-      _ST('RPM', obd.rpm.toStringAsFixed(0), 'rpm',
-          Icons.rotate_right, AppTheme.neonOrange,
-          (obd.rpm / 6000).clamp(0.0, 1.0)),
-      _ST('Kecepatan', obd.speed.toStringAsFixed(0), 'km/h',
-          Icons.speed, AppTheme.neonCyan,
-          (obd.speed / 200).clamp(0.0, 1.0)),
-      _ST('Coolant', obd.coolantTemp.toStringAsFixed(1), '°C',
-          Icons.thermostat,
-          obd.coolantTemp > 100
-              ? AppTheme.neonOrange
-              : AppTheme.neonGreen,
-          (obd.coolantTemp / 130).clamp(0.0, 1.0)),
-      _ST('Aki', obd.batteryVoltage.toStringAsFixed(2), 'V',
-          FontAwesomeIcons.carBattery,
-          obd.batteryVoltage < 12.0
-              ? AppTheme.neonOrange
-              : AppTheme.neonCyan,
-          ((obd.batteryVoltage - 10) / 6).clamp(0.0, 1.0)),
+    // Battery Status
+    final batteryColor = obd.batteryVoltage == 0
+        ? Colors.grey
+        : obd.batteryVoltage < 12.0
+            ? AppTheme.neonOrange
+            : obd.batteryVoltage < 12.5
+                ? AppTheme.neonYellow
+                : AppTheme.neonGreen;
+    final batteryText = obd.batteryVoltage == 0 ? '-' : '${obd.batteryVoltage.toStringAsFixed(1)}V';
+
+    // Coolant Status
+    final coolantColor = obd.coolantTemp == 0
+        ? Colors.grey
+        : obd.coolantTemp > 105
+            ? AppTheme.neonOrange
+            : obd.coolantTemp > 100
+                ? AppTheme.neonYellow
+                : AppTheme.neonGreen;
+    final coolantText = obd.coolantTemp == 0 ? '-' : '${obd.coolantTemp.toStringAsFixed(0)}°C';
+
+    // DTC Status
+    final dtcColor = obd.dtcCodes.isEmpty ? AppTheme.neonGreen : AppTheme.neonOrange;
+    final dtcText = obd.dtcCodes.isEmpty ? 'Sehat' : '${obd.dtcCodes.split(',').length} Kode';
+
+    // Physical Status
+    final physicalColor = inspectionProblems == 0 ? AppTheme.neonGreen : AppTheme.neonOrange;
+    final physicalText = inspectionProblems == 0 ? 'Bagus' : '$inspectionProblems Eror';
+
+    final items = [
+      ('Aki', batteryText, batteryColor, FontAwesomeIcons.carBattery),
+      ('Suhu', coolantText, coolantColor, Icons.thermostat),
+      ('DTC', dtcText, dtcColor, Icons.report_problem_rounded),
+      ('Fisik', physicalText, physicalColor, Icons.checklist_rounded),
     ];
 
-    return GridView.count(
-      crossAxisCount: 2,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisSpacing: 10,
-      mainAxisSpacing: 10,
-      childAspectRatio: 1.6,
-      children: tiles
-          .map((t) => Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppTheme.darkSurface,
-                  borderRadius: BorderRadius.circular(18),
-                  border: Border.all(
-                      color: t.color.withOpacity(0.15)),
+    return Row(
+      children: items.map((item) {
+        final (label, val, color, icon) = item;
+        return Expanded(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+            decoration: BoxDecoration(
+              color: AppTheme.darkSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withOpacity(0.12)),
+            ),
+            child: Column(
+              children: [
+                Icon(icon, size: 16, color: color),
+                const SizedBox(height: 8),
+                Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 10)),
+                const SizedBox(height: 4),
+                Text(
+                  val,
+                  style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(t.label,
-                            style: const TextStyle(
-                                color: Colors.grey, fontSize: 11)),
-                        Icon(t.icon, size: 14, color: t.color),
-                      ],
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        RichText(
-                            text: TextSpan(children: [
-                          TextSpan(
-                              text: t.value,
-                              style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold)),
-                          TextSpan(
-                              text: ' ${t.unit}',
-                              style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 11)),
-                        ])),
-                        const SizedBox(height: 4),
-                        LinearProgressIndicator(
-                          value: t.progress,
-                          minHeight: 3,
-                          borderRadius: BorderRadius.circular(4),
-                          backgroundColor:
-                              Colors.white.withOpacity(0.05),
-                          valueColor:
-                              AlwaysStoppedAnimation(t.color),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ))
-          .toList(),
-    ).animate().fade(delay: 100.ms);
+              ],
+            ),
+          ),
+        );
+      }).toList(),
+    );
   }
 }
 
-// Compact model for sensor tile data
-class _ST {
-  final String label, value, unit;
-  final IconData icon;
-  final Color color;
-  final double progress;
-  const _ST(this.label, this.value, this.unit, this.icon,
-      this.color, this.progress);
+class _RecentServiceLogsDashboardList extends StatelessWidget {
+  final List<Map<String, dynamic>> logs;
+  const _RecentServiceLogsDashboardList({required this.logs});
+
+  @override
+  Widget build(BuildContext context) {
+    if (logs.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          color: AppTheme.darkSurface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withOpacity(0.04)),
+        ),
+        child: Column(
+          children: [
+            Icon(Icons.library_books_outlined, size: 36, color: Colors.grey[600]),
+            const SizedBox(height: 10),
+            const Text(
+              'Belum Ada Catatan Servis',
+              style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Catat servis pertama Anda untuk mengaktifkan riwayat AI.',
+              style: TextStyle(color: Colors.grey[500], fontSize: 11),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    final recentLogs = logs.take(3).toList();
+    return Column(
+      children: recentLogs.map((log) {
+        final type = log['service_type'] ?? 'Servis';
+        final odo = log['current_mileage'] ?? 0;
+        final dateStr = log['service_date'] as String? ?? '';
+        final date = DateTime.tryParse(dateStr);
+        final dateFormatted = date != null
+            ? '${date.day}/${date.month}/${date.year}'
+            : '-';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppTheme.darkSurface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(0.04)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.build_rounded, size: 14, color: AppTheme.neonCyan),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      type,
+                      style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      'Odometer: $odo km · $dateFormatted',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+            ],
+          ),
+        );
+      }).toList(),
+    );
+  }
 }
 
 class _SectionHeader extends StatelessWidget {
@@ -974,6 +1068,7 @@ class _QuickActionsRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final actions = [
       (Icons.checklist_rounded, 'Inspeksi', AppTheme.neonCyan, '/inspection'),
+      (Icons.library_books_rounded, 'Catatan', AppTheme.neonYellow, '/service-logs'),
       (FontAwesomeIcons.robot, 'Tanya AI', AppTheme.neonOrange, '/chatbot'),
       (Icons.directions_car_rounded, 'Kendaraan', AppTheme.neonGreen, '/vehicles'),
     ];

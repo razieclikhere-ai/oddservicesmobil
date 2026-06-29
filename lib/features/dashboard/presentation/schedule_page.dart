@@ -9,67 +9,317 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/database/app_database.dart';
+import 'service_logs_page.dart';
 
 class SchedulePage extends ConsumerWidget {
   const SchedulePage({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final activeTab = ref.watch(selectedServisTabProvider);
+    final activeUuid = ref.watch(activeVehicleUuidProvider);
     final schedulesAsync = ref.watch(schedulesProvider);
+    final logsAsync = ref.watch(serviceLogsProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
       appBar: AppBar(
         backgroundColor: AppTheme.darkSurface,
         title: const Text(
-          'Jadwal Servis',
+          'Jadwal & Catatan Servis',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, color: AppTheme.neonCyan),
-            onPressed: () => ref.invalidate(schedulesProvider),
-            tooltip: 'Refresh',
+          if (activeTab == 0)
+            IconButton(
+              icon: const Icon(Icons.refresh, color: AppTheme.neonCyan),
+              onPressed: () => ref.invalidate(schedulesProvider),
+              tooltip: 'Refresh',
+            ),
+          if (activeTab == 1)
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline_rounded, color: AppTheme.neonCyan),
+              onPressed: () => _showFormDialog(context, ref, activeUuid),
+              tooltip: 'Catat Servis Baru',
+            ),
+        ],
+      ),
+      body: Column(
+        children: [
+          _buildSegmentedControl(context, ref, activeTab),
+          Expanded(
+            child: activeTab == 0
+                ? _buildJadwalView(context, ref, schedulesAsync)
+                : _buildRiwayatView(context, ref, logsAsync, activeUuid),
           ),
         ],
       ),
-      body: schedulesAsync.when(
-        loading: () => _buildSkeletonLoader(),
-        error: (e, _) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline,
-                  size: 48, color: AppTheme.neonOrange),
-              const SizedBox(height: 12),
-              Text('Gagal memuat jadwal: $e',
-                  style: const TextStyle(color: Colors.white70),
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () => ref.invalidate(schedulesProvider),
-                style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.neonCyan,
-                    foregroundColor: Colors.black),
-                child: const Text('Coba Lagi'),
-              ),
-            ],
+    );
+  }
+
+  Widget _buildSegmentedControl(BuildContext context, WidgetRef ref, int activeTab) {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          _SegmentButton(
+            label: 'Estimasi Jadwal (AI)',
+            isActive: activeTab == 0,
+            onTap: () => ref.read(selectedServisTabProvider.notifier).state = 0,
           ),
+          _SegmentButton(
+            label: 'Riwayat Catatan',
+            isActive: activeTab == 1,
+            onTap: () => ref.read(selectedServisTabProvider.notifier).state = 1,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildJadwalView(BuildContext context, WidgetRef ref, AsyncValue<List<Map<String, dynamic>>> schedulesAsync) {
+    return schedulesAsync.when(
+      loading: () => _buildSkeletonLoader(),
+      error: (e, _) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.neonOrange),
+            const SizedBox(height: 12),
+            Text('Gagal memuat jadwal: $e', style: const TextStyle(color: Colors.white70), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => ref.invalidate(schedulesProvider),
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.neonCyan, foregroundColor: Colors.black),
+              child: const Text('Coba Lagi'),
+            ),
+          ],
         ),
-        data: (schedules) => schedules.isEmpty
-            ? _buildEmptyState()
-            : RefreshIndicator(
-                color: AppTheme.neonCyan,
-                onRefresh: () async => ref.invalidate(schedulesProvider),
-                child: ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: schedules.length,
-                  itemBuilder: (_, i) => _ScheduleCard(
-                    schedule: schedules[i],
-                    index: i,
-                  ),
+      ),
+      data: (schedules) => schedules.isEmpty
+          ? _buildEmptyState()
+          : RefreshIndicator(
+              color: AppTheme.neonCyan,
+              onRefresh: () async => ref.invalidate(schedulesProvider),
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: schedules.length,
+                itemBuilder: (_, i) => _ScheduleCard(
+                  schedule: schedules[i],
+                  index: i,
                 ),
               ),
+            ),
+    );
+  }
+
+  Widget _buildRiwayatView(
+      BuildContext context, WidgetRef ref, AsyncValue<List<Map<String, dynamic>>> logsAsync, String activeUuid) {
+    return logsAsync.when(
+      loading: () => const Center(
+        child: CircularProgressIndicator(color: AppTheme.neonCyan),
+      ),
+      error: (e, _) => Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 48, color: AppTheme.neonOrange),
+            const SizedBox(height: 12),
+            Text('Gagal memuat catatan: $e', style: const TextStyle(color: Colors.white70)),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => ref.invalidate(serviceLogsProvider),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.neonCyan,
+                foregroundColor: Colors.black,
+              ),
+              child: const Text('Coba Lagi'),
+            ),
+          ],
+        ),
+      ),
+      data: (logs) => logs.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.library_books_outlined, size: 64, color: Colors.grey),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Belum Ada Catatan Servis',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    child: Text(
+                      'Catat riwayat ganti oli, aki, rem, dll. AI akan menganalisis jadwal berikutnya secara otomatis.',
+                      style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.neonCyan,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    onPressed: () => _showFormDialog(context, ref, activeUuid),
+                    icon: const Icon(Icons.add),
+                    label: const Text('Catat Servis Pertama', style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              color: AppTheme.neonCyan,
+              onRefresh: () async => ref.invalidate(serviceLogsProvider),
+              child: ListView.builder(
+                padding: const EdgeInsets.all(16),
+                itemCount: logs.length,
+                itemBuilder: (context, index) {
+                  final log = logs[index];
+                  final date = DateTime.tryParse(log['service_date'] as String? ?? '') ?? DateTime.now();
+                  final dateStr = DateFormat('dd MMM yyyy', 'id_ID').format(date);
+                  final cost = log['cost'] as int? ?? 0;
+
+                  return GestureDetector(
+                    onTap: () => _showFormDialog(context, ref, activeUuid, log),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkSurface,
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: Colors.white.withOpacity(0.04)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  log['service_type'] ?? 'Servis Berkala',
+                                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                dateStr,
+                                style: const TextStyle(color: AppTheme.neonCyan, fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              if ((log['oil_brand'] as String? ?? '').isNotEmpty)
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      const Icon(Icons.opacity_rounded, size: 13, color: AppTheme.neonCyan),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Suku Cadang/Oli: ${log['oil_brand']}',
+                                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              if (cost > 0)
+                                Text(
+                                  NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(cost),
+                                  style: const TextStyle(color: AppTheme.neonGreen, fontSize: 12, fontWeight: FontWeight.bold),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          const Divider(color: Colors.white10),
+                          const SizedBox(height: 8),
+
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              _buildValueColumn('KM Saat Servis', '${log['current_mileage']} km'),
+                              _buildValueColumn('KM Servis Berikutnya', '${log['next_target_mileage']} km'),
+                            ],
+                          ),
+
+                          if ((log['notes'] as String? ?? '').isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.02),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                log['notes'] ?? '',
+                                style: const TextStyle(color: Colors.white38, fontSize: 11, fontStyle: FontStyle.italic),
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 10),
+                          const Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              Text('Ketuk untuk ubah / hapus data', style: TextStyle(color: Colors.white24, fontSize: 9)),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+    );
+  }
+
+  Widget _buildValueColumn(String label, String value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+        const SizedBox(height: 3),
+        Text(
+          value,
+          style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+        ),
+      ],
+    );
+  }
+
+  void _showFormDialog(BuildContext context, WidgetRef ref, String vehicleUuid, [Map<String, dynamic>? logToEdit]) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.darkSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => ServiceLogForm(
+        vehicleUuid: vehicleUuid,
+        logToEdit: logToEdit,
+        onSaved: () {
+          ref.invalidate(serviceLogsProvider);
+          ref.invalidate(schedulesProvider);
+        },
       ),
     );
   }
@@ -115,6 +365,39 @@ class SchedulePage extends ConsumerWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _SegmentButton extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+  const _SegmentButton({required this.label, required this.isActive, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: isActive ? Colors.white.withOpacity(0.08) : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isActive ? AppTheme.neonCyan : Colors.grey,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ),
       ),
     );
   }

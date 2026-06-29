@@ -116,6 +116,9 @@ final inspectionProblemsCountProvider =
 // ── Bottom Navigation Tab Index Provider ─────────────────────────────────────
 final dashboardTabIndexProvider = StateProvider<int>((ref) => 0);
 
+// ── Selected Servis Tab Index Provider (0 = Jadwal AI, 1 = Riwayat Catatan) ────
+final selectedServisTabProvider = StateProvider<int>((ref) => 0);
+
 // ── Retrieve API Key dynamically (SharedPreferences first, then compile time) ─
 Future<String> getEffectiveApiKey() async {
   final prefs = await SharedPreferences.getInstance();
