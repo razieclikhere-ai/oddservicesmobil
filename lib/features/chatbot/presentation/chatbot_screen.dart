@@ -153,7 +153,7 @@ Jangan berikan penjelasan tentang format CMD ini ke pengguna, cukup eksekusi sec
           'Content-Type': 'application/json',
         }),
         data: {
-          'model': 'llama3-70b-8192',
+          'model': 'llama-3.3-70b-versatile',
           'messages': _chatHistory,
           'temperature': 0.5,
           'max_tokens': 600,

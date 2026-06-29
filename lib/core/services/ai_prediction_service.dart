@@ -92,7 +92,7 @@ Prediksikan jadwal servis berikutnya.''';
           'Content-Type': 'application/json',
         }),
         data: {
-          'model': 'llama3-70b-8192',
+          'model': 'llama-3.3-70b-versatile',
           'messages': [
             {'role': 'system', 'content': systemPrompt},
             {'role': 'user', 'content': userPrompt},
@@ -439,7 +439,7 @@ ${isDriving ? '- MANDATORY: The user is currently driving (speed > 0). Keep your
           'Content-Type': 'application/json',
         }),
         data: {
-          'model': 'llama3-70b-8192',
+          'model': 'llama-3.3-70b-versatile',
           'messages': [
             {'role': 'system', 'content': systemPrompt},
             {'role': 'user', 'content': query},
