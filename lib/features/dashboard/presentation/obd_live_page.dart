@@ -124,9 +124,12 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
   }
 
   Widget _buildLiveView(ObdBluetoothService obd, ObdConnectionState state) {
+    final durationStr = _formatDuration(obd.tripStartTime);
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Circular Gauges: Speed & RPM
           Row(children: [
@@ -156,11 +159,78 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
           ]),
           const SizedBox(height: 16),
 
+          // Section 1: Trip & Fuel Statistics
+          const Text(
+            'Statistik Perjalanan & BBM',
+            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+          ).animate().fadeIn(duration: 300.ms),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppTheme.darkSurface,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.white.withOpacity(0.04)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildStatColumn('Jarak Trip', '${obd.tripDistance.toStringAsFixed(2)} km', Icons.map_outlined, AppTheme.neonCyan),
+                    _buildStatColumn('Durasi Perjalanan', durationStr, Icons.timer_outlined, AppTheme.neonYellow),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Divider(color: Colors.white10),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _buildStatColumn('Rata-rata BBM', obd.avgFuelEconomy > 0 ? '${obd.avgFuelEconomy.toStringAsFixed(1)} km/L' : '-', Icons.query_stats_rounded, AppTheme.neonGreen),
+                    _buildStatColumn('Konsumsi Instan', obd.instantFuelEconomy > 0 ? '${obd.instantFuelEconomy.toStringAsFixed(1)} km/L' : 'Idling / -', Icons.local_gas_station_rounded, AppTheme.neonOrange),
+                  ],
+                ),
+              ],
+            ),
+          ).animate().fadeIn(duration: 400.ms),
+          const SizedBox(height: 20),
+
+          // Section 2: Peak Values
+          const Text(
+            'Nilai Puncak (Sesi Ini)',
+            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+          ).animate().fadeIn(duration: 300.ms),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _buildPeakCard('Kecepatan Maks', '${obd.maxSpeed.toStringAsFixed(0)} km/h', Icons.speed, AppTheme.neonCyan),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPeakCard('RPM Maks', '${obd.maxRpm.toStringAsFixed(0)} rpm', Icons.rotate_right, AppTheme.neonOrange),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildPeakCard('Suhu Maks', '${obd.maxCoolantTemp.toStringAsFixed(0)} °C', Icons.thermostat, AppTheme.neonGreen),
+              ),
+            ],
+          ).animate().fadeIn(duration: 400.ms),
+          const SizedBox(height: 20),
+
+          // Section 3: Diagnostic Sensors
+          const Text(
+            'Parameter Diagnostik',
+            style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+          ).animate().fadeIn(duration: 300.ms),
+          const SizedBox(height: 10),
+
           // Linear Sensor Cards: Coolant & Battery
           Row(children: [
             Expanded(
               child: _LinearSensorCard(
-                label: 'Radiator (Coolant)',
+                label: 'Suhu Radiator',
                 value: '${obd.coolantTemp.toStringAsFixed(1)} °C',
                 max: 120,
                 current: obd.coolantTemp,
@@ -225,10 +295,59 @@ class _ObdLivePageState extends ConsumerState<ObdLivePage> {
                 ? AppTheme.neonCyan
                 : Colors.grey,
           ),
-          const SizedBox(height: 80),
+          const SizedBox(height: 40),
         ],
       ),
     );
+  }
+
+  Widget _buildStatColumn(String label, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Row(
+        children: [
+          Icon(icon, size: 20, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                const SizedBox(height: 2),
+                Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPeakCard(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.darkSurface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.08)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 14, color: color),
+          const SizedBox(height: 6),
+          Text(label, style: TextStyle(color: Colors.grey[500], fontSize: 9), textAlign: TextAlign.center),
+          const SizedBox(height: 4),
+          Text(value, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+
+  String _formatDuration(DateTime? start) {
+    if (start == null) return '0m 0s';
+    final diff = DateTime.now().difference(start);
+    final m = diff.inMinutes;
+    final s = diff.inSeconds % 60;
+    return '${m}m ${s}s';
   }
 }
 

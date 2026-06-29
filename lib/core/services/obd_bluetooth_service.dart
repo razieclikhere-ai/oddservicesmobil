@@ -58,6 +58,15 @@ class ObdBluetoothService {
   String dtcCodes       = '';
   int    currentOdometer = 0;
   double _accumulatedKm  = 0.0; // Track fractional kilometers
+  double mafAirFlow      = 0.0; // Mass Air Flow in g/s
+  double tripDistance    = 0.0; // in km
+  double tripFuelUsed    = 0.0; // in Liters
+  double avgFuelEconomy  = 0.0; // in km/L
+  double instantFuelEconomy = 0.0; // in km/L
+  double maxSpeed        = 0.0;
+  double maxRpm          = 0.0;
+  double maxCoolantTemp  = 0.0;
+  DateTime? tripStartTime;
 
   // ── Public API ────────────────────────────────────────────────────────────
 
@@ -175,8 +184,47 @@ class ObdBluetoothService {
     speed          = 60.0;
     fuelTrim       = 2.5;
     dtcCodes       = '';
+    mafAirFlow     = 10.2;
+    tripDistance   = 0.0;
+    tripFuelUsed   = 0.0;
+    maxSpeed       = 60.0;
+    maxRpm         = 1500.0;
+    maxCoolantTemp = 85.0;
+    tripStartTime  = DateTime.now();
+
     _updateState(ObdConnectionState.simulating);
     _log.i('OBD: Simulation mode started');
+
+    _pollingTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+      if (_currentState != ObdConnectionState.simulating) {
+        timer.cancel();
+        return;
+      }
+
+      // Simulate vehicle speed/rpm variations
+      final sec = DateTime.now().second;
+      speed = 60.0 + (sec % 5) * 4.0;
+      rpm = 1500.0 + (sec % 8) * 120.0;
+      coolantTemp = 85.0 + (sec % 10) * 0.1;
+      mafAirFlow = 10.0 + (sec % 6) * 1.5;
+
+      if (speed > maxSpeed) maxSpeed = speed;
+      if (rpm > maxRpm) maxRpm = rpm;
+      if (coolantTemp > maxCoolantTemp) maxCoolantTemp = coolantTemp;
+
+      // Accumulate stats
+      final kmDelta = speed * (2.0 / 3600.0);
+      tripDistance += kmDelta;
+      currentOdometer += kmDelta.floor();
+
+      // Estimate fuel consumption
+      final fallbackLitersPerHour = (rpm * 0.0015) + (speed * 0.04);
+      final fuelDelta = (fallbackLitersPerHour / 3600.0) * 2.0;
+      tripFuelUsed += fuelDelta;
+
+      avgFuelEconomy = tripFuelUsed > 0 ? (tripDistance / tripFuelUsed) : 0.0;
+      instantFuelEconomy = fallbackLitersPerHour > 0 ? (speed / fallbackLitersPerHour) : 0.0;
+    });
   }
 
   /// Must be called when the app is disposed (rarely needed — singleton lives
@@ -198,6 +246,16 @@ class ObdBluetoothService {
     try {
       _connection = await _flutterBlueClassic.connect(device.address);
       if (_connection != null) {
+        // Reset trip variables on fresh connection
+        tripDistance = 0.0;
+        tripFuelUsed = 0.0;
+        avgFuelEconomy = 0.0;
+        instantFuelEconomy = 0.0;
+        maxSpeed = 0.0;
+        maxRpm = 0.0;
+        maxCoolantTemp = 0.0;
+        tripStartTime = DateTime.now();
+
         _updateState(ObdConnectionState.connected);
         NotificationService.showInstantNotification(
           id: 1,
@@ -293,9 +351,10 @@ class ObdBluetoothService {
         case 2: _sendCmd('0105'); break; // Coolant Temp
         case 3: _sendCmd('ATRV'); break; // Battery voltage
         case 4: _sendCmd('0106'); break; // Short-term Fuel Trim
-        case 5: _sendCmd('03');   break; // DTC codes
+        case 5: _sendCmd('0110'); break; // MAF Air Flow
+        case 6: _sendCmd('03');   break; // DTC codes
       }
-      pollIndex = (pollIndex + 1) % 6;
+      pollIndex = (pollIndex + 1) % 7;
     });
 
     // Persist to DB every 30 s
@@ -340,15 +399,19 @@ class ObdBluetoothService {
           final a = int.parse(clean.substring(idxRpm + 4, idxRpm + 6), radix: 16);
           final b = int.parse(clean.substring(idxRpm + 6, idxRpm + 8), radix: 16);
           rpm = (a * 256 + b) / 4.0;
+          if (rpm > maxRpm) maxRpm = rpm;
         }
 
         final idxSpeed = clean.indexOf('410D');
         if (idxSpeed != -1 && clean.length >= idxSpeed + 6) {
           speed = int.parse(clean.substring(idxSpeed + 4, idxSpeed + 6), radix: 16).toDouble();
+          if (speed > maxSpeed) maxSpeed = speed;
           
           // Accumulate distance (2 seconds polling interval = 2 / 3600 hours)
           if (speed > 0) {
-            _accumulatedKm += speed * (2.0 / 3600.0);
+            final kmDelta = speed * (2.0 / 3600.0);
+            _accumulatedKm += kmDelta;
+            tripDistance += kmDelta;
             if (_accumulatedKm >= 1.0) {
               final wholeKms = _accumulatedKm.floor();
               currentOdometer += wholeKms;
@@ -361,11 +424,33 @@ class ObdBluetoothService {
         final idxCoolant = clean.indexOf('4105');
         if (idxCoolant != -1 && clean.length >= idxCoolant + 6) {
           coolantTemp = (int.parse(clean.substring(idxCoolant + 4, idxCoolant + 6), radix: 16) - 40).toDouble();
+          if (coolantTemp > maxCoolantTemp) maxCoolantTemp = coolantTemp;
         }
 
         final idxFuel = clean.indexOf('4106');
         if (idxFuel != -1 && clean.length >= idxFuel + 6) {
           fuelTrim = (int.parse(clean.substring(idxFuel + 4, idxFuel + 6), radix: 16) - 128) * 100 / 128;
+        }
+
+        final idxMaf = clean.indexOf('4110');
+        if (idxMaf != -1 && clean.length >= idxMaf + 8) {
+          final a = int.parse(clean.substring(idxMaf + 4, idxMaf + 6), radix: 16);
+          final b = int.parse(clean.substring(idxMaf + 6, idxMaf + 8), radix: 16);
+          mafAirFlow = (a * 256 + b) / 100.0;
+        }
+
+        // Calculate fuel economy based on MAF or proxy estimation
+        final double litersPerHour = mafAirFlow > 0 
+            ? ((mafAirFlow / 14.7) / 740.0 * 3600.0) 
+            : ((rpm * 0.0015) + (speed * 0.04));
+            
+        if (litersPerHour > 0) {
+          // Accumulate fuel used in 2s interval (2 / 3600 hours)
+          final fuelDelta = (litersPerHour / 3600.0) * 2.0;
+          tripFuelUsed += fuelDelta;
+          
+          avgFuelEconomy = tripFuelUsed > 0 ? (tripDistance / tripFuelUsed) : 0.0;
+          instantFuelEconomy = (speed > 0) ? (speed / litersPerHour) : 0.0;
         }
 
         final idxDtc = clean.indexOf('43');
