@@ -86,11 +86,11 @@ class _BottomNav extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
         border:
-            Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+            Border(top: BorderSide(color: Colors.white.withOpacity(0.04))),
       ),
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: items.asMap().entries.map((e) {
@@ -100,27 +100,42 @@ class _BottomNav extends StatelessWidget {
               return GestureDetector(
                 onTap: () => onTap(i),
                 behavior: HitTestBehavior.opaque,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: isActive
-                        ? AppTheme.neonCyan.withOpacity(0.1)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                child: SizedBox(
+                  width: MediaQuery.of(context).size.width / items.length - 8,
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(
-                        item.icon,
-                        size: 22,
-                        color: isActive
-                            ? AppTheme.neonCyan
-                            : Colors.grey[600],
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        transform: isActive
+                            ? (Matrix4.identity()..translate(0, -2))
+                            : Matrix4.identity(),
+                        child: Icon(
+                          item.icon,
+                          size: 22,
+                          color: isActive
+                              ? AppTheme.neonCyan
+                              : Colors.grey[500],
+                        ),
                       ),
-                      const SizedBox(height: 3),
+                      const SizedBox(height: 4),
+                      AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: isActive ? 16 : 0,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: AppTheme.neonCyan,
+                          borderRadius: BorderRadius.circular(1.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.neonCyan.withOpacity(0.5),
+                              blurRadius: 4,
+                              spreadRadius: 0.5,
+                            )
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 4),
                       Text(
                         item.label,
                         style: TextStyle(
@@ -129,8 +144,8 @@ class _BottomNav extends StatelessWidget {
                               ? FontWeight.bold
                               : FontWeight.normal,
                           color: isActive
-                              ? AppTheme.neonCyan
-                              : Colors.grey[600],
+                              ? Colors.white
+                              : Colors.grey[500],
                         ),
                       ),
                     ],

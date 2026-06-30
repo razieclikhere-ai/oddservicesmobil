@@ -56,9 +56,9 @@ class InspectionChecklistScreen extends ConsumerStatefulWidget {
 class _InspectionChecklistScreenState
     extends ConsumerState<InspectionChecklistScreen> {
   static String get _obfuscatedApiKey {
-    const part1 = 'gsk_exMM6y7n';
-    const part2 = 'CJJqt7qh6sjNWGdy';
-    const part3 = 'b3FY8XthZ6rGXnvq3AVXQLSKSCHE';
+    const part1 = 'gsk_f8qH2zII';
+    const part2 = 'MzVqwxjRguvKWGdy';
+    const part3 = 'b3FYrNIlN9WAJ6Yn3NQXA8hku7LA';
     return part1 + part2 + part3;
   }
 
@@ -335,10 +335,13 @@ class _InspectionChecklistScreenState
         '\nBerikan analisis singkat dan rekomendasi prioritas tindakan yang harus segera dilakukan, dalam Bahasa Indonesia.');
 
     try {
+      final activeKey = await getEffectiveApiKey();
+      final key = activeKey.isNotEmpty ? activeKey : _apiKey;
+
       final dio = Dio(BaseOptions(
         baseUrl: 'https://api.groq.com/openai/v1',
         headers: {
-          'Authorization': 'Bearer $_apiKey',
+          'Authorization': 'Bearer $key',
           'Content-Type': 'application/json'
         },
         connectTimeout: const Duration(seconds: 15),
@@ -346,7 +349,7 @@ class _InspectionChecklistScreenState
       ));
 
       final response = await dio.post('/chat/completions', data: {
-        'model': 'llama3-70b-8192',
+        'model': 'llama-3.3-70b-versatile',
         'messages': [
           {
             'role': 'system',
