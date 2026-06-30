@@ -3,6 +3,7 @@
 // Router delegated to core/routes/app_router.dart
 // SplashScreen in core/presentation/splash_screen.dart
 // HomeShell in features/dashboard/presentation/home_shell.dart
+// Trigger build: 2026-06-30 UI/UX and AI Bugfix deployment
 // ────────────────────────────────────────────────────────────────────────────
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
