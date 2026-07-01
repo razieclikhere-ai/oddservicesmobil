@@ -72,12 +72,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final size = MediaQuery.of(context).size;
 
     // Get active vehicle name dynamically
-    final vehicleName = vehiclesAsync.valueOrNull
-            ?.firstWhere(
-              (v) => v['uuid'] == activeUuid,
-              orElse: () => <String, dynamic>{},
-            )['name'] as String? ??
-        'Kendaraan Saya';
+    final activeVehicle = vehiclesAsync.valueOrNull?.firstWhere(
+      (v) => v['uuid'] == activeUuid,
+      orElse: () => <String, dynamic>{},
+    );
+    final vehicleName = (activeVehicle != null && activeVehicle.isNotEmpty)
+        ? activeVehicle['name'] as String? ?? 'Kendaraan Saya'
+        : 'Kendaraan Saya';
 
     return Scaffold(
       backgroundColor: AppTheme.darkBg,
