@@ -128,3 +128,31 @@ Future<String> getEffectiveApiKey() async {
   }
   return const String.fromEnvironment('GROQ_API_KEY', defaultValue: '');
 }
+
+// ── Theme Mode Provider ──────────────────────────────────────────────────────
+final themeModeProvider = StateNotifierProvider<ThemeModeNotifier, ThemeMode>((ref) {
+  return ThemeModeNotifier();
+});
+
+class ThemeModeNotifier extends StateNotifier<ThemeMode> {
+  ThemeModeNotifier() : super(ThemeMode.dark) {
+    _loadTheme();
+  }
+
+  Future<void> _loadTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    final mode = prefs.getString('app_theme_mode') ?? 'dark';
+    state = mode == 'light' ? ThemeMode.light : ThemeMode.dark;
+  }
+
+  Future<void> toggleTheme() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (state == ThemeMode.dark) {
+      state = ThemeMode.light;
+      await prefs.setString('app_theme_mode', 'light');
+    } else {
+      state = ThemeMode.dark;
+      await prefs.setString('app_theme_mode', 'dark');
+    }
+  }
+}

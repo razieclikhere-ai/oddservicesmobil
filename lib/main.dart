@@ -61,11 +61,13 @@ class SmartOBDApp extends ConsumerWidget {
       });
     });
 
+    final mode = ref.watch(themeModeProvider);
+
     return MaterialApp.router(
       title: 'Chek Mobilku',
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
-      themeMode: ThemeMode.dark,
+      themeMode: mode,
       routerConfig: appRouter,
       debugShowCheckedModeBanner: false,
       builder: (context, child) {

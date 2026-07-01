@@ -5,14 +5,13 @@
 // ────────────────────────────────────────────────────────────────────────────
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/app_providers.dart';
 import 'dashboard_screen.dart';
-import 'obd_live_page.dart';
 import 'schedule_page.dart';
+import 'voice_chat_screen.dart';
+import '../../vehicles/presentation/vehicles_screen.dart';
 import 'profile_page.dart';
-import 'widgets/jazzy_voice_assistant.dart';
 
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
@@ -24,34 +23,29 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> {
   static const _pages = [
     DashboardScreen(),
-    ObdLivePage(),
     SchedulePage(),
+    VoiceChatScreen(),
+    VehiclesScreen(),
     ProfilePage(),
   ];
 
   static const _navItems = [
     _NavItem(icon: Icons.dashboard_rounded, label: 'Dashboard'),
-    _NavItem(icon: Icons.sensors, label: 'Live OBD'),
-    _NavItem(icon: Icons.build_circle_rounded, label: 'Servis'),
+    _NavItem(icon: Icons.build_circle_rounded, label: 'Service'),
+    _NavItem(icon: Icons.mic_rounded, label: 'Voice Chat'),
+    _NavItem(icon: Icons.directions_car_rounded, label: 'Kendaraan'),
     _NavItem(icon: Icons.person_rounded, label: 'Profil'),
   ];
 
   @override
   Widget build(BuildContext context) {
     final navIndex = ref.watch(dashboardTabIndexProvider);
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark;
 
     return Scaffold(
-      backgroundColor: AppTheme.darkBg,
-      body: Stack(
-        children: [
-          IndexedStack(index: navIndex, children: _pages),
-          const Positioned(
-            bottom: 16,
-            right: 16,
-            child: JazzyVoiceAssistant(),
-          ),
-        ],
-      ),
+      backgroundColor: isDark ? AppTheme.darkBg : Colors.grey[100],
+      body: IndexedStack(index: navIndex, children: _pages),
       bottomNavigationBar: _BottomNav(
         currentIndex: navIndex,
         items: _navItems,
@@ -82,15 +76,20 @@ class _BottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       decoration: BoxDecoration(
-        color: AppTheme.darkSurface.withOpacity(0.92),
+        color: isDark ? AppTheme.darkSurface.withOpacity(0.92) : Colors.white.withOpacity(0.95),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.06) : Colors.black.withOpacity(0.06), 
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.35),
+            color: Colors.black.withOpacity(isDark ? 0.35 : 0.08),
             blurRadius: 18,
             offset: const Offset(0, 8),
           ),
@@ -154,7 +153,7 @@ class _BottomNav extends StatelessWidget {
                               ? FontWeight.bold
                               : FontWeight.normal,
                           color: isActive
-                              ? Colors.white
+                              ? (isDark ? Colors.white : Colors.black87)
                               : Colors.grey[500],
                         ),
                       ),

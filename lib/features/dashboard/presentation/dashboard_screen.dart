@@ -80,8 +80,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ? activeVehicle['name'] as String? ?? 'Kendaraan Saya'
         : 'Kendaraan Saya';
 
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark;
+
     return Scaffold(
-      backgroundColor: AppTheme.darkBg,
+      backgroundColor: isDark ? AppTheme.darkBg : Colors.grey[100],
       body: CustomScrollView(
         slivers: [
           _buildSliverAppBar(state),
@@ -96,6 +99,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 _ConnectionBanner(
                     state: state, onTap: _toggleConnection),
                 const SizedBox(height: 16),
+
+                // Real-time speed & RPM gauges
+                Row(children: [
+                  Expanded(
+                    child: _CircularGauge(
+                      label: 'Kecepatan',
+                      value: obd.speed.toStringAsFixed(0),
+                      unit: 'km/h',
+                      max: 200,
+                      current: obd.speed,
+                      color: AppTheme.neonCyan,
+                      icon: Icons.speed,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _CircularGauge(
+                      label: 'RPM Mesin',
+                      value: obd.rpm.toStringAsFixed(0),
+                      unit: 'rpm',
+                      max: 7000,
+                      current: obd.rpm,
+                      color: AppTheme.neonOrange,
+                      icon: Icons.rotate_right,
+                    ),
+                  ),
+                ]),
+                const SizedBox(height: 20),
 
                 // Health ring
                 _HealthRingCard(
@@ -474,11 +505,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   }
 
   SliverAppBar _buildSliverAppBar(ObdConnectionState state) {
+    final themeMode = ref.watch(themeModeProvider);
+    final isDark = themeMode == ThemeMode.dark;
+
     return SliverAppBar(
       expandedHeight: 60,
       floating: true,
       snap: true,
-      backgroundColor: AppTheme.darkBg,
+      backgroundColor: isDark ? AppTheme.darkBg : Colors.grey[50],
       title: Row(children: [
         Image.asset(
           'assets/images/app_icon.png',
@@ -490,10 +524,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               size: 24),
         ),
         const SizedBox(width: 10),
-        const Text(
+        Text(
           'CHEK MOBILKU',
           style: TextStyle(
-              color: AppTheme.neonCyan,
+              color: isDark ? AppTheme.neonCyan : Colors.blue[900],
               fontSize: 16,
               fontWeight: FontWeight.bold,
               letterSpacing: 2),
@@ -501,14 +535,23 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ]),
       actions: [
         IconButton(
+          icon: Icon(
+            isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+            color: isDark ? Colors.grey : Colors.black87,
+            size: 20,
+          ),
+          onPressed: () => ref.read(themeModeProvider.notifier).toggleTheme(),
+          tooltip: 'Ganti Tema',
+        ),
+        IconButton(
           icon: const Icon(FontAwesomeIcons.robot,
               color: AppTheme.neonCyan, size: 18),
           onPressed: () => context.push('/chatbot'),
           tooltip: 'AI Chatbot',
         ),
         IconButton(
-          icon: const Icon(Icons.settings_outlined,
-              color: Colors.grey, size: 20),
+          icon: Icon(Icons.settings_outlined,
+              color: isDark ? Colors.grey : Colors.black87, size: 20),
           onPressed: () => context.push('/settings'),
           tooltip: 'Pengaturan',
         ),
@@ -1247,4 +1290,117 @@ class _TC extends StatelessWidget {
       child: Text(text,
           style: const TextStyle(
               color: Colors.white70, fontSize: 12)));
+}
+
+class _CircularGauge extends StatelessWidget {
+  final String label, value, unit;
+  final double max, current;
+  final double min;
+  final Color color;
+  final IconData icon;
+
+  const _CircularGauge({
+    required this.label,
+    required this.value,
+    required this.unit,
+    required this.max,
+    required this.current,
+    required this.color,
+    required this.icon,
+    this.min = 0,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final ratio = ((current - min) / (max - min)).clamp(0.0, 1.0);
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? color.withOpacity(0.12) : color.withOpacity(0.2),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(isDark ? 0.04 : 0.08),
+            blurRadius: 16,
+            spreadRadius: 2,
+          )
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, size: 14, color: color),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                    color: isDark ? Colors.grey : Colors.grey[700],
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            width: 110,
+            height: 110,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                // Glow Halo
+                SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: CircularProgressIndicator(
+                    value: ratio,
+                    strokeWidth: 12,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation(color.withOpacity(0.18)),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                // Main Ring
+                SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: CircularProgressIndicator(
+                    value: ratio,
+                    strokeWidth: 8,
+                    backgroundColor: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.05),
+                    valueColor: AlwaysStoppedAnimation(color),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      value,
+                      style: TextStyle(
+                          color: isDark ? Colors.white : Colors.black87,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      unit,
+                      style: TextStyle(
+                          color: isDark ? Colors.grey[500] : Colors.grey[600],
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
