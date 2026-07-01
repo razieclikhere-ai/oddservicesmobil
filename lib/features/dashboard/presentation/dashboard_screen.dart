@@ -666,6 +666,19 @@ class _HealthRingCard extends StatelessWidget {
               width: 110,
               height: 110,
               child: Stack(alignment: Alignment.center, children: [
+                // Glow Halo
+                SizedBox(
+                  width: 110,
+                  height: 110,
+                  child: CircularProgressIndicator(
+                    value: score / 100,
+                    strokeWidth: 14,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation(color.withOpacity(0.18)),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                // Main Ring
                 SizedBox(
                   width: 110,
                   height: 110,
