@@ -33,10 +33,18 @@ void main() async {
   ]);
 
   // Init locale for date formatting (Indonesian)
-  await initializeDateFormatting('id_ID', null);
+  try {
+    await initializeDateFormatting('id_ID', null);
+  } catch (e) {
+    debugPrint('Bootstrap: Locale initialization failed: $e');
+  }
 
   // Init notification service
-  await NotificationService.init();
+  try {
+    await NotificationService.init();
+  } catch (e) {
+    debugPrint('Bootstrap: NotificationService initialization failed: $e');
+  }
 
   runApp(const ProviderScope(child: SmartOBDApp()));
 }
