@@ -63,7 +63,7 @@ class ProfilePage extends ConsumerWidget {
                 name: active['name'] as String? ?? '-',
                 brand:
                     '${active['brand']} ${active['model']} ${active['year']}',
-                mileage: active['current_mileage'] as int? ?? 0,
+                mileage: (active['current_mileage'] as num?)?.toInt() ?? 0,
                 uuid: active['uuid'] as String? ?? '',
                 activeUuid: activeUuid,
               );

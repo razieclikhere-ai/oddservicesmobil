@@ -440,11 +440,11 @@ class _ScheduleCard extends ConsumerWidget {
     }
 
     final nextMil =
-        schedule['next_predicted_mileage'] as int? ?? 0;
+        (schedule['next_predicted_mileage'] as num?)?.toInt() ?? 0;
     final lastMil =
-        schedule['last_service_mileage'] as int? ?? 0;
+        (schedule['last_service_mileage'] as num?)?.toInt() ?? 0;
     final intervalKm =
-        schedule['interval_mileage'] as int? ?? 10000;
+        (schedule['interval_mileage'] as num?)?.toInt() ?? 10000;
     final description =
         schedule['description'] as String? ?? '';
     final dateFormatted = nextDate != null

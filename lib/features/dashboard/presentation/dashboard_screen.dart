@@ -717,7 +717,7 @@ class _HealthRingCard extends StatelessWidget {
                     value: score / 100,
                     strokeWidth: 14,
                     backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation(color.withOpacity(0.18)),
+                    valueColor: AlwaysStoppedAnimation<Color>(color.withOpacity(0.18)),
                     strokeCap: StrokeCap.round,
                   ),
                 ),
@@ -729,7 +729,7 @@ class _HealthRingCard extends StatelessWidget {
                     value: score / 100,
                     strokeWidth: 10,
                     backgroundColor: Colors.white.withOpacity(0.05),
-                    valueColor: AlwaysStoppedAnimation(color),
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
                     strokeCap: StrokeCap.round,
                   ),
                 ),
@@ -1046,7 +1046,7 @@ class _UpcomingServiceCard extends StatelessWidget {
     final next = schedules.first; // Already ordered by date ASC from DB
     final name = next['service_name'] as String? ?? 'Servis Berkala';
     final desc = next['description'] as String? ?? '';
-    final nextMil = next['next_predicted_mileage'] as int? ?? 0;
+    final nextMil = (next['next_predicted_mileage'] as num?)?.toInt() ?? 0;
     final nextDate = DateTime.tryParse(
         next['next_predicted_date'] as String? ?? '');
     final daysLeft =
@@ -1361,7 +1361,7 @@ class _CircularGauge extends StatelessWidget {
                     value: ratio,
                     strokeWidth: 12,
                     backgroundColor: Colors.transparent,
-                    valueColor: AlwaysStoppedAnimation(color.withOpacity(0.18)),
+                    valueColor: AlwaysStoppedAnimation<Color>(color.withOpacity(0.18)),
                     strokeCap: StrokeCap.round,
                   ),
                 ),
@@ -1373,7 +1373,7 @@ class _CircularGauge extends StatelessWidget {
                     value: ratio,
                     strokeWidth: 8,
                     backgroundColor: isDark ? Colors.white.withOpacity(0.03) : Colors.black.withOpacity(0.05),
-                    valueColor: AlwaysStoppedAnimation(color),
+                    valueColor: AlwaysStoppedAnimation<Color>(color),
                     strokeCap: StrokeCap.round,
                   ),
                 ),
