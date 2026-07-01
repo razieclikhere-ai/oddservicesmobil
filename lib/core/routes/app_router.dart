@@ -11,6 +11,7 @@ import '../../features/chatbot/presentation/chatbot_screen.dart';
 import '../../features/inspection/presentation/inspection_checklist_screen.dart';
 import '../../features/vehicles/presentation/vehicles_screen.dart';
 import '../../features/settings/presentation/settings_screen.dart';
+import '../../features/onboarding/presentation/permission_screen.dart';
 import '../presentation/splash_screen.dart';
 
 final appRouter = GoRouter(
@@ -21,6 +22,11 @@ final appRouter = GoRouter(
       path: '/splash',
       name: 'splash',
       pageBuilder: (context, state) => _fade(state, const SplashScreen()),
+    ),
+    GoRoute(
+      path: '/permissions',
+      name: 'permissions',
+      pageBuilder: (context, state) => _fade(state, const PermissionScreen()),
     ),
     GoRoute(
       path: '/dashboard',

@@ -5,6 +5,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -18,8 +19,16 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    Future.delayed(const Duration(milliseconds: 2800), () {
-      if (mounted) context.go('/dashboard');
+    Future.delayed(const Duration(milliseconds: 2800), () async {
+      if (mounted) {
+        final prefs = await SharedPreferences.getInstance();
+        final seen = prefs.getBool('has_seen_permissions') ?? false;
+        if (seen) {
+          context.go('/dashboard');
+        } else {
+          context.go('/permissions');
+        }
+      }
     });
   }
 
