@@ -188,13 +188,19 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
 
     try {
       final obd = ObdBluetoothService.instance;
-      final obdSummary = obd.isConnected
+      final isConnected = obd.currentState == ObdConnectionState.connected || obd.currentState == ObdConnectionState.simulating;
+      final obdSummary = isConnected
           ? "Mobil terhubung. RPM: ${obd.rpm}, Kecepatan: ${obd.speed} km/h, Aki: ${obd.batteryVoltage}V, Coolant: ${obd.coolantTemp}°C, DTC: ${obd.dtcCodes}."
           : "Mobil tidak terhubung ke OBD. Aki: ${obd.batteryVoltage}V, Coolant: ${obd.coolantTemp}°C.";
 
-      final prompt = "User bertanya lewat suara: '$command'.\nStatus OBD saat ini: $obdSummary\nBerikan jawaban pendek, santai, dan solutif maksimal 3 kalimat dalam Bahasa Indonesia.";
-      
-      final reply = await AiPredictionService.analyzeObdLog(prompt);
+      final reply = await AiPredictionService.getJazzyResponse(
+        query: command,
+        coolantTemp: obd.coolantTemp,
+        batteryVoltage: obd.batteryVoltage,
+        rpm: obd.rpm,
+        speed: obd.speed,
+        dtcCodes: obd.dtcCodes,
+      );
       
       if (mounted) {
         setState(() {
@@ -397,8 +403,8 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
                       onPlay: (controller) => controller.repeat(reverse: true),
                     )
                     .scale(
-                      begin: 1.0,
-                      end: 1.08,
+                      begin: const Offset(1.0, 1.0),
+                      end: const Offset(1.08, 1.08),
                       duration: 800.ms,
                       curve: Curves.easeInOut,
                     ),
