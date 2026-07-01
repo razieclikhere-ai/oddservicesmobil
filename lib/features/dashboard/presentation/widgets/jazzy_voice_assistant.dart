@@ -39,23 +39,25 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
   }
 
   void _initTts() async {
-    _flutterTts = FlutterTts();
-    await _flutterTts.setLanguage("id-ID");
-    await _flutterTts.setSpeechRate(0.48); // Natural conversational speed
-    await _flutterTts.setVolume(1.0);
-    await _flutterTts.setPitch(0.95); // Friendly female pitch adjustment
-
     try {
+      _flutterTts = FlutterTts();
+      await _flutterTts.setLanguage("id-ID");
+      await _flutterTts.setSpeechRate(0.48); // Natural conversational speed
+      await _flutterTts.setVolume(1.0);
+      await _flutterTts.setPitch(0.95); // Friendly female pitch adjustment
+
       final dynamic voices = await _flutterTts.getVoices;
       String? bestVoice;
-      for (final v in voices) {
-        final String name = (v['name'] as String? ?? '').toLowerCase();
-        final String locale = (v['locale'] as String? ?? '').toLowerCase();
-        if (locale.contains('id')) {
-          // Prefer network-based high-quality neural voices
-          if (name.contains('network') || name.contains('idc') || name.contains('knd')) {
-            bestVoice = v['name'] as String;
-            break;
+      if (voices != null) {
+        for (final v in voices) {
+          final String name = (v['name'] as String? ?? '').toLowerCase();
+          final String locale = (v['locale'] as String? ?? '').toLowerCase();
+          if (locale.contains('id')) {
+            // Prefer network-based high-quality neural voices
+            if (name.contains('network') || name.contains('idc') || name.contains('knd')) {
+              bestVoice = v['name'] as String;
+              break;
+            }
           }
         }
       }
@@ -63,44 +65,44 @@ class _JazzyVoiceAssistantState extends State<JazzyVoiceAssistant> {
         await _flutterTts.setVoice({"name": bestVoice, "locale": "id-ID"});
         _log.d("Jazzy: Selected neural voice: $bestVoice");
       }
-    } catch (e) {
-      _log.w("Jazzy: Error setting neural voice: $e");
+
+      _flutterTts.setStartHandler(() {
+        if (mounted) {
+          setState(() {
+            _isSpeaking = true;
+            _isListening = false;
+            _statusText = "Jazzy Berbicara...";
+          });
+        }
+      });
+
+      _flutterTts.setCompletionHandler(() {
+        if (mounted) {
+          setState(() {
+            _isSpeaking = false;
+            _statusText = "Mendengarkan...";
+          });
+          // After speaking, automatically return to listening mode if open
+          if (_isOpen && _alwaysOnMode) {
+            _startSpeechListening();
+          }
+        }
+      });
+
+      _flutterTts.setErrorHandler((msg) {
+        if (mounted) {
+          setState(() {
+            _isSpeaking = false;
+            _statusText = "Ketuk untuk Bicara";
+          });
+          if (_isOpen && _alwaysOnMode) {
+            _startSpeechListening();
+          }
+        }
+      });
+    } catch (e, st) {
+      _log.e("Jazzy: TTS initialization failed", error: e, stackTrace: st);
     }
-
-    _flutterTts.setStartHandler(() {
-      if (mounted) {
-        setState(() {
-          _isSpeaking = true;
-          _isListening = false;
-          _statusText = "Jazzy Berbicara...";
-        });
-      }
-    });
-
-    _flutterTts.setCompletionHandler(() {
-      if (mounted) {
-        setState(() {
-          _isSpeaking = false;
-          _statusText = "Mendengarkan...";
-        });
-        // After speaking, automatically return to listening mode if open
-        if (_isOpen && _alwaysOnMode) {
-          _startSpeechListening();
-        }
-      }
-    });
-
-    _flutterTts.setErrorHandler((msg) {
-      if (mounted) {
-        setState(() {
-          _isSpeaking = false;
-          _statusText = "Ketuk untuk Bicara";
-        });
-        if (_isOpen && _alwaysOnMode) {
-          _startSpeechListening();
-        }
-      }
-    });
   }
 
   Future<void> _initSpeech() async {
