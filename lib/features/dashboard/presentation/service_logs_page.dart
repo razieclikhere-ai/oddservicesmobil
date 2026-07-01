@@ -10,6 +10,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../../core/database/app_database.dart';
 import '../../../../core/providers/app_providers.dart';
 import '../../../../core/services/ai_prediction_service.dart';
+import '../../../../core/utils/safe_format.dart';
 
 class ServiceLogsPage extends ConsumerStatefulWidget {
   const ServiceLogsPage({super.key});
@@ -120,7 +121,7 @@ class _ServiceLogsPageState extends ConsumerState<ServiceLogsPage> {
                     final date =
                         DateTime.tryParse(log['service_date'] as String? ?? '') ??
                             DateTime.now();
-                    final dateStr = DateFormat('dd MMM yyyy', 'id_ID').format(date);
+                    final dateStr = SafeFormat.date(date);
                     final cost = log['cost'] as int? ?? 0;
 
                     return GestureDetector(
@@ -169,11 +170,7 @@ class _ServiceLogsPageState extends ConsumerState<ServiceLogsPage> {
                                   ]),
                                 if (cost > 0)
                                   Text(
-                                    NumberFormat.currency(
-                                            locale: 'id_ID',
-                                            symbol: 'Rp ',
-                                            decimalDigits: 0)
-                                        .format(cost),
+                                    SafeFormat.currency(cost),
                                     style: const TextStyle(
                                         color: AppTheme.neonGreen,
                                         fontSize: 12,

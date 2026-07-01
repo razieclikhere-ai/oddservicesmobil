@@ -8,6 +8,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/providers/app_providers.dart';
+import '../../../core/utils/safe_format.dart';
 
 class ScanHistoryPage extends ConsumerStatefulWidget {
   const ScanHistoryPage({super.key});
@@ -108,7 +109,7 @@ class _ScanHistoryPageState extends ConsumerState<ScanHistoryPage> {
                         DateTime.tryParse(scan['scan_date'] as String? ?? '') ??
                             DateTime.now();
                     final dateFormatted =
-                        DateFormat('dd/MM/yyyy HH:mm', 'id_ID').format(date);
+                        SafeFormat.dateShort(date);
                     final isError =
                         (scan['dtc_codes'] as String? ?? '').isNotEmpty;
 

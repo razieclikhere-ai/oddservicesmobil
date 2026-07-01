@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../core/database/app_database.dart';
+import '../../../core/utils/safe_format.dart';
 import 'service_logs_page.dart';
 
 class SchedulePage extends ConsumerWidget {
@@ -188,7 +189,7 @@ class SchedulePage extends ConsumerWidget {
                 itemBuilder: (context, index) {
                   final log = logs[index];
                   final date = DateTime.tryParse(log['service_date'] as String? ?? '') ?? DateTime.now();
-                  final dateStr = DateFormat('dd MMM yyyy', 'id_ID').format(date);
+                  final dateStr = SafeFormat.date(date);
                   final cost = log['cost'] as int? ?? 0;
 
                   return GestureDetector(
@@ -242,7 +243,7 @@ class SchedulePage extends ConsumerWidget {
                                 ),
                               if (cost > 0)
                                 Text(
-                                  NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0).format(cost),
+                                  SafeFormat.currency(cost),
                                   style: const TextStyle(color: AppTheme.neonGreen, fontSize: 12, fontWeight: FontWeight.bold),
                                 ),
                             ],
@@ -446,7 +447,7 @@ class _ScheduleCard extends ConsumerWidget {
     final description =
         schedule['description'] as String? ?? '';
     final dateFormatted = nextDate != null
-        ? DateFormat('dd MMM yyyy', 'id_ID').format(nextDate)
+        ? SafeFormat.date(nextDate)
         : '-';
 
     return GestureDetector(
