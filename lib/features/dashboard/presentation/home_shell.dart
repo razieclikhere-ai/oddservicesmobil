@@ -116,7 +116,7 @@ class _BottomNav extends StatelessWidget {
                         duration: const Duration(milliseconds: 250),
                         curve: Curves.easeOutBack,
                         transform: isActive
-                            ? (Matrix4.identity()..translate(0, -3))
+                            ? (Matrix4.identity()..translate(0.0, -3.0))
                             : Matrix4.identity(),
                         child: Icon(
                           item.icon,
