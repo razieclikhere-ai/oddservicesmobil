@@ -27,7 +27,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
   String _aiResponse = "Halo! Saya Jazzy, asisten suara pintar Anda. Ada yang bisa saya bantu dengan kendaraan Anda hari ini?";
   String _statusText = "Ketuk Mikrofon untuk Berbicara";
 
-  late FlutterTts _flutterTts;
+  FlutterTts? _flutterTts;
   final SpeechToText _speechToText = SpeechToText();
   bool _speechInitialized = false;
   bool _alwaysOnMode = false;
@@ -42,7 +42,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
   @override
   void dispose() {
     try {
-      _flutterTts.stop();
+      _flutterTts?.stop();
       _speechToText.stop();
     } catch (_) {}
     super.dispose();
@@ -50,13 +50,13 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
 
   void _initTts() async {
     try {
-      _flutterTts = FlutterTts();
-      await _flutterTts.setLanguage("id-ID");
-      await _flutterTts.setSpeechRate(0.48);
-      await _flutterTts.setVolume(1.0);
-      await _flutterTts.setPitch(0.95);
+      final tts = FlutterTts();
+      await tts.setLanguage("id-ID");
+      await tts.setSpeechRate(0.48);
+      await tts.setVolume(1.0);
+      await tts.setPitch(0.95);
 
-      final dynamic voices = await _flutterTts.getVoices;
+      final dynamic voices = await tts.getVoices;
       String? bestVoice;
       if (voices != null) {
         for (final v in voices) {
@@ -71,10 +71,10 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
         }
       }
       if (bestVoice != null) {
-        await _flutterTts.setVoice({"name": bestVoice, "locale": "id-ID"});
+        await tts.setVoice({"name": bestVoice, "locale": "id-ID"});
       }
 
-      _flutterTts.setStartHandler(() {
+      tts.setStartHandler(() {
         if (mounted) {
           setState(() {
             _isSpeaking = true;
@@ -84,7 +84,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
         }
       });
 
-      _flutterTts.setCompletionHandler(() {
+      tts.setCompletionHandler(() {
         if (mounted) {
           setState(() {
             _isSpeaking = false;
@@ -96,7 +96,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
         }
       });
 
-      _flutterTts.setErrorHandler((msg) {
+      tts.setErrorHandler((msg) {
         if (mounted) {
           setState(() {
             _isSpeaking = false;
@@ -107,6 +107,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
           }
         }
       });
+      _flutterTts = tts;
     } catch (e) {
       _log.e("VoiceChatScreen: TTS init failed: $e");
     }
@@ -207,7 +208,7 @@ class _VoiceChatScreenState extends State<VoiceChatScreen> {
           _isThinking = false;
           _aiResponse = reply;
         });
-        await _flutterTts.speak(reply);
+        await _flutterTts?.speak(reply);
       }
     } catch (e) {
       if (mounted) {

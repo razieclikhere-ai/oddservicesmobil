@@ -68,20 +68,23 @@ class _SplashScreenState extends State<SplashScreen> {
                       )
                     ],
                   ),
-                  child: Image.asset(
-                    'assets/images/splash_logo.png',
-                    width: 140,
-                    height: 140,
-                    errorBuilder: (_, __, ___) => Container(
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/splash_logo.png',
                       width: 140,
                       height: 140,
-                      decoration: BoxDecoration(
-                        color: AppTheme.darkSurface,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: AppTheme.neonCyan, width: 2),
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        width: 140,
+                        height: 140,
+                        decoration: BoxDecoration(
+                          color: AppTheme.darkSurface,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: AppTheme.neonCyan, width: 2),
+                        ),
+                        child: const Icon(Icons.speed,
+                            color: AppTheme.neonCyan, size: 60),
                       ),
-                      child: const Icon(Icons.speed,
-                          color: AppTheme.neonCyan, size: 60),
                     ),
                   ),
                 )

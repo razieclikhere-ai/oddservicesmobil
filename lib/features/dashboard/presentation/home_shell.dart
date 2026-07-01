@@ -21,14 +21,6 @@ class HomeShell extends ConsumerStatefulWidget {
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> {
-  static const _pages = [
-    DashboardScreen(),
-    SchedulePage(),
-    VoiceChatScreen(),
-    VehiclesScreen(),
-    ProfilePage(),
-  ];
-
   static const _navItems = [
     _NavItem(icon: Icons.dashboard_rounded, label: 'Dashboard'),
     _NavItem(icon: Icons.build_circle_rounded, label: 'Service'),
@@ -43,9 +35,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final themeMode = ref.watch(themeModeProvider);
     final isDark = themeMode == ThemeMode.dark;
 
+    final pages = [
+      const DashboardScreen(),
+      const SchedulePage(),
+      const VoiceChatScreen(),
+      const VehiclesScreen(),
+      const ProfilePage(),
+    ];
+
     return Scaffold(
       backgroundColor: isDark ? AppTheme.darkBg : Colors.grey[100],
-      body: IndexedStack(index: navIndex, children: _pages),
+      body: IndexedStack(index: navIndex, children: pages),
       bottomNavigationBar: _BottomNav(
         currentIndex: navIndex,
         items: _navItems,
