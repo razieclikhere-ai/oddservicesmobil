@@ -238,23 +238,30 @@ class _VehicleCard extends StatelessWidget {
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            AppTheme.neonCyan.withOpacity(0.12),
+            AppTheme.neonCyan.withOpacity(0.08),
             AppTheme.darkSurface,
           ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(20),
-        border:
-            Border.all(color: AppTheme.neonCyan.withOpacity(0.2)),
+        borderRadius: AppTheme.cardRadius,
+        border: Border.all(color: AppTheme.neonCyan.withOpacity(0.15), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.neonCyan.withOpacity(0.02),
+            blurRadius: 16,
+            spreadRadius: 2,
+          )
+        ],
       ),
       child: Row(children: [
         Container(
           width: 52,
           height: 52,
           decoration: BoxDecoration(
-            color: AppTheme.neonCyan.withOpacity(0.1),
+            color: AppTheme.neonCyan.withOpacity(0.08),
             borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppTheme.neonCyan.withOpacity(0.15)),
           ),
           child: const Icon(Icons.directions_car,
               color: AppTheme.neonCyan, size: 28),
@@ -289,8 +296,9 @@ class _VehicleCard extends StatelessWidget {
           padding: const EdgeInsets.symmetric(
               horizontal: 8, vertical: 4),
           decoration: BoxDecoration(
-            color: AppTheme.neonGreen.withOpacity(0.15),
+            color: AppTheme.neonGreen.withOpacity(0.12),
             borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: AppTheme.neonGreen.withOpacity(0.2)),
           ),
           child: const Text('AKTIF',
               style: TextStyle(
@@ -320,24 +328,24 @@ class _MenuCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppTheme.darkSurface,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: AppTheme.cardRadius,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppTheme.cardRadius,
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-                color: Colors.white.withOpacity(0.05)),
+            borderRadius: AppTheme.cardRadius,
+            border: AppTheme.glassBorder,
           ),
           child: Row(children: [
             Container(
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(0.12),
+                color: color.withOpacity(0.08),
                 borderRadius: BorderRadius.circular(13),
+                border: Border.all(color: color.withOpacity(0.12)),
               ),
               child: Icon(icon, size: 20, color: color),
             ),

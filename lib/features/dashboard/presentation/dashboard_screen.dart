@@ -912,12 +912,37 @@ class _SectionHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold)),
-        if (trailing != null)
+        Expanded(
+          child: Row(
+            children: [
+              Container(
+                width: 3,
+                height: 14,
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan,
+                  borderRadius: BorderRadius.circular(2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.neonCyan.withOpacity(0.5),
+                      blurRadius: 4,
+                    )
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(title,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis),
+              ),
+            ],
+          ),
+        ),
+        if (trailing != null) ...[
+          const SizedBox(width: 8),
           Container(
             padding:
                 const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -933,6 +958,7 @@ class _SectionHeader extends StatelessWidget {
                     fontSize: 10,
                     fontWeight: FontWeight.bold)),
           ),
+        ],
       ],
     );
   }
@@ -1083,17 +1109,31 @@ class _QuickActionsRow extends StatelessWidget {
             onTap: () => context.push(route),
             child: Container(
               margin: EdgeInsets.only(right: isLast ? 0 : 10),
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              padding: const EdgeInsets.symmetric(vertical: 16),
               decoration: BoxDecoration(
                 color: AppTheme.darkSurface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: color.withOpacity(0.2)),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: color.withOpacity(0.12), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withOpacity(0.02),
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  )
+                ],
               ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(icon, color: color, size: 22),
-                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.08),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: 20),
+                  ),
+                  const SizedBox(height: 8),
                   Text(label,
                       style: const TextStyle(
                           color: Colors.white,

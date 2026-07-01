@@ -424,7 +424,7 @@ class _CircularGauge extends StatelessWidget {
         border: Border.all(color: color.withOpacity(0.12)),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.03),
+            color: color.withOpacity(0.04),
             blurRadius: 16,
             spreadRadius: 2,
           )
@@ -453,6 +453,19 @@ class _CircularGauge extends StatelessWidget {
             child: Stack(
               alignment: Alignment.center,
               children: [
+                // Glow Halo
+                SizedBox(
+                  width: 100,
+                  height: 100,
+                  child: CircularProgressIndicator(
+                    value: ratio,
+                    strokeWidth: 12,
+                    backgroundColor: Colors.transparent,
+                    valueColor: AlwaysStoppedAnimation(color.withOpacity(0.18)),
+                    strokeCap: StrokeCap.round,
+                  ),
+                ),
+                // Main Ring
                 SizedBox(
                   width: 100,
                   height: 100,

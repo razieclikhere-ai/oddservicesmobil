@@ -64,7 +64,8 @@ class SchedulePage extends ConsumerWidget {
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.04)),
       ),
       child: Row(
         children: [
@@ -386,8 +387,8 @@ class _SegmentButton extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 10),
           decoration: BoxDecoration(
-            color: isActive ? Colors.white.withOpacity(0.08) : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            color: isActive ? AppTheme.neonCyan.withOpacity(0.08) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
           ),
           child: Text(
             label,

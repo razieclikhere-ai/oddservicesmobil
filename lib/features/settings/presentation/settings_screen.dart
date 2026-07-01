@@ -363,7 +363,8 @@ class _SettingsCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppTheme.darkSurface,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: AppTheme.cardRadius,
+        border: AppTheme.glassBorder,
       ),
       child: Column(
         children: children
@@ -372,7 +373,7 @@ class _SettingsCard extends StatelessWidget {
                   if (c != children.last)
                     Divider(
                         height: 1,
-                        color: Colors.white.withOpacity(0.05),
+                        color: Colors.white.withOpacity(0.04),
                         indent: 56),
                 ]))
             .toList(),

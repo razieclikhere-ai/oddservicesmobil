@@ -9,6 +9,15 @@ class AppTheme {
   static const Color neonGreen = Color(0xFF00E676);
   static const Color neonYellow = Color(0xFFFFD600);
   
+  static const double cardRadiusVal = 20.0;
+  static final BorderRadius cardRadius = BorderRadius.circular(cardRadiusVal);
+  static final Border glassBorder = Border.all(color: Colors.white.withOpacity(0.04));
+  static final BoxDecoration glassDecoration = BoxDecoration(
+    color: darkSurface,
+    borderRadius: cardRadius,
+    border: glassBorder,
+  );
+  
   static ThemeData get lightTheme {
     return ThemeData(
       useMaterial3: true,

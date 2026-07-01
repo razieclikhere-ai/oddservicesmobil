@@ -46,28 +46,49 @@ class _SplashScreenState extends State<SplashScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // Logo
-                Image.asset(
-                  'assets/images/splash_logo.png',
-                  width: 140,
-                  height: 140,
-                  errorBuilder: (_, __, ___) => Container(
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppTheme.neonCyan.withOpacity(0.08), width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppTheme.neonCyan.withOpacity(0.1),
+                        blurRadius: 32,
+                        spreadRadius: 4,
+                      )
+                    ],
+                  ),
+                  child: Image.asset(
+                    'assets/images/splash_logo.png',
                     width: 140,
                     height: 140,
-                    decoration: BoxDecoration(
-                      color: AppTheme.darkSurface,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppTheme.neonCyan, width: 2),
+                    errorBuilder: (_, __, ___) => Container(
+                      width: 140,
+                      height: 140,
+                      decoration: BoxDecoration(
+                        color: AppTheme.darkSurface,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.neonCyan, width: 2),
+                      ),
+                      child: const Icon(Icons.speed,
+                          color: AppTheme.neonCyan, size: 60),
                     ),
-                    child: const Icon(Icons.speed,
-                        color: AppTheme.neonCyan, size: 60),
                   ),
                 )
                     .animate()
+                    .fadeIn(duration: 600.ms)
                     .scale(
-                        begin: const Offset(0.6, 0.6),
-                        duration: 600.ms,
+                        begin: const Offset(0.7, 0.7),
+                        duration: 800.ms,
                         curve: Curves.elasticOut)
-                    .fadeIn(duration: 400.ms),
+                    .then()
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .scale(
+                        begin: const Offset(1.0, 1.0),
+                        end: const Offset(1.05, 1.05),
+                        duration: 1500.ms,
+                        curve: Curves.easeInOut),
 
                 const SizedBox(height: 28),
 

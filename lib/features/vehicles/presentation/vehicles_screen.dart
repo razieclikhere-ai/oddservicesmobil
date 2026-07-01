@@ -537,12 +537,22 @@ class _VehiclesScreenState extends ConsumerState<VehiclesScreen> {
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: AppTheme.darkSurface,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: AppTheme.cardRadius,
             border: Border.all(
               color: isActive
-                  ? AppTheme.neonCyan.withOpacity(0.3)
+                  ? AppTheme.neonCyan.withOpacity(0.22)
                   : Colors.white.withOpacity(0.04),
+              width: isActive ? 1.2 : 1,
             ),
+            boxShadow: isActive
+                ? [
+                    BoxShadow(
+                      color: AppTheme.neonCyan.withOpacity(0.02),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                    )
+                  ]
+                : null,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -565,8 +575,9 @@ class _VehiclesScreenState extends ConsumerState<VehiclesScreen> {
                       padding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppTheme.neonGreen.withOpacity(0.15),
+                        color: AppTheme.neonGreen.withOpacity(0.12),
                         borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.neonGreen.withOpacity(0.2)),
                       ),
                       child: const Text('AKTIF',
                           style: TextStyle(

@@ -725,25 +725,46 @@ class _InspectionChecklistScreenState
     }
 
     if (!_allChecked) {
-      return FloatingActionButton.extended(
-        onPressed: null,
-        backgroundColor: Colors.grey[800],
-        label: Text(
-          'Selesaikan Dulu ($_checkedCount/$_totalCount)',
-          style:
-              const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold),
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.darkSurface.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
         ),
-        icon: const Icon(Icons.checklist_rounded, color: Colors.grey),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.checklist_rounded, color: Colors.grey, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              'Lengkapi Checklist ($_checkedCount/$_totalCount)',
+              style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ],
+        ),
       );
     }
 
-    return FloatingActionButton.extended(
-      onPressed: _analyzeWithAI,
-      backgroundColor: AppTheme.neonCyan,
-      foregroundColor: Colors.black,
-      icon: const Icon(FontAwesomeIcons.robot, size: 18),
-      label: const Text('Analisis dengan AI',
-          style: TextStyle(fontWeight: FontWeight.bold)),
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: AppTheme.neonCyan.withOpacity(0.25),
+            blurRadius: 16,
+            spreadRadius: 1,
+          )
+        ],
+      ),
+      child: FloatingActionButton.extended(
+        onPressed: _analyzeWithAI,
+        backgroundColor: AppTheme.neonCyan,
+        foregroundColor: Colors.black,
+        icon: const Icon(FontAwesomeIcons.robot, size: 16),
+        label: const Text('Analisis dengan AI',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+      ),
     ).animate().scale(duration: 300.ms, curve: Curves.elasticOut);
   }
 }
