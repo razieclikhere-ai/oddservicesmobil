@@ -138,6 +138,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ),
                 const SizedBox(height: 20),
 
+                // Trip & Efficiency Card
+                _TripEfficiencyCard(obd: obd),
+                const SizedBox(height: 20),
+
                 // Diagnostic Quick Panel
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1397,6 +1401,176 @@ class _CircularGauge extends StatelessWidget {
                   ],
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Trip & Efficiency Card Widget ─────────────────────────────────────────────
+class _TripEfficiencyCard extends StatelessWidget {
+  final ObdBluetoothService obd;
+
+  const _TripEfficiencyCard({required this.obd});
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: isDark ? AppTheme.darkSurface : Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.04) : Colors.grey.withOpacity(0.12),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: AppTheme.neonCyan.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.bar_chart_rounded, color: AppTheme.neonCyan, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Trip & Efisiensi BBM',
+                    style: TextStyle(
+                      color: isDark ? Colors.white : Colors.black87,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  const Text(
+                    'Statistik perjalanan dan konsumsi bahan bakar',
+                    style: TextStyle(color: Colors.grey, fontSize: 11),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          
+          // 2x2 Grid for Metrics
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            mainAxisSpacing: 16,
+            crossAxisSpacing: 16,
+            childAspectRatio: 1.5,
+            children: [
+              _buildMetricTile(
+                context,
+                title: 'Jarak Trip',
+                value: '${obd.tripDistance.toStringAsFixed(1)} km',
+                subtitle: 'Rata-rata: ${obd.tripDistance.toStringAsFixed(1)} km',
+                icon: Icons.alt_route_rounded,
+                color: AppTheme.neonCyan,
+                isDark: isDark,
+              ),
+              _buildMetricTile(
+                context,
+                title: 'BBM Terpakai',
+                value: '${obd.tripFuelUsed.toStringAsFixed(2)} L',
+                subtitle: 'BBM Selama Trip',
+                icon: Icons.local_gas_station_rounded,
+                color: AppTheme.neonOrange,
+                isDark: isDark,
+              ),
+              _buildMetricTile(
+                context,
+                title: 'Rata-rata BBM',
+                value: '${obd.avgFuelEconomy.toStringAsFixed(1)} km/L',
+                subtitle: 'Konsumsi Rerata',
+                icon: Icons.speed_rounded,
+                color: AppTheme.neonGreen,
+                isDark: isDark,
+              ),
+              _buildMetricTile(
+                context,
+                title: 'Instan BBM',
+                value: '${obd.instantFuelEconomy.toStringAsFixed(1)} km/L',
+                subtitle: 'Konsumsi Real-time',
+                icon: Icons.eco_rounded,
+                color: Colors.lightGreenAccent,
+                isDark: isDark,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMetricTile(
+    BuildContext context, {
+    required String title,
+    required String value,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required bool isDark,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withOpacity(0.02) : Colors.grey[50],
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.03) : Colors.grey.withOpacity(0.08),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(color: Colors.grey, fontSize: 11),
+              ),
+              Icon(icon, color: color.withOpacity(0.8), size: 16),
+            ],
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: TextStyle(
+              color: isDark ? Colors.white : Colors.black87,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'monospace',
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            subtitle,
+            style: TextStyle(
+              color: isDark ? Colors.white60 : Colors.black54,
+              fontSize: 9,
             ),
           ),
         ],

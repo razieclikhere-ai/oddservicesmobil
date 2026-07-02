@@ -5,6 +5,7 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:logger/logger.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../database/app_database.dart';
 import '../providers/app_providers.dart';
 import 'notification_service.dart';
@@ -164,6 +165,89 @@ Prediksikan jadwal servis berikutnya.''';
   // ══════════════════════════════════════════════════════════════════════════
   // Jazzy Chat Response
   // ══════════════════════════════════════════════════════════════════════════
+  static Future<String> _getInspectionSummary(String vehicleUuid) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final savedJson = prefs.getString('inspection_$vehicleUuid');
+      if (savedJson == null) return 'Belum melakukan inspeksi fisik.';
+      
+      final Map<String, dynamic> data = jsonDecode(savedJson);
+      final List<String> problems = [];
+      final List<String> warnings = [];
+      
+      final Map<String, String> itemLabels = {
+        'tire_pressure': 'Tekanan Ban',
+        'leaks': 'Kebocoran Cairan',
+        'lights': 'Fungsi Lampu',
+        'coolant_level': 'Level Air Radiator',
+        'brake_fluid_level': 'Level Minyak Rem',
+        'engine_oil_color': 'Warna & Level Oli Mesin',
+        'battery_terminals': 'Terminal Aki',
+        'wiper_fluid': 'Air Wiper',
+        'hoses_belts': 'Selang & Sabuk Mesin',
+        'tire_tread': 'Ketebalan Alur Ban',
+        'brake_pads': 'Kampas Rem',
+        'suspension': 'Suspensi & Shockbreaker',
+        'exhaust': 'Knalpot & Gas Buang',
+        'air_filter_cond': 'Kondisi Filter Udara',
+        'dashboard_warning': 'Lampu Peringatan Dasbor',
+        'air_conditioner': 'Sistem AC',
+        'wipers': 'Karet Wiper',
+        'seat_belts': 'Sabuk Pengaman',
+        'horn': 'Klakson',
+        'transmission_fluid': 'Oli Transmisi',
+        'power_steering_fluid': 'Minyak Power Steering',
+        'spark_plugs_cond': 'Kondisi Busi',
+        'wheel_alignment': 'Kemudi & Spuring',
+      };
+      
+      data.forEach((key, val) {
+        final label = itemLabels[key] ?? key;
+        final intStatus = (val as num?)?.toInt() ?? 0;
+        if (intStatus == 3) {
+          problems.add(label);
+        } else if (intStatus == 2) {
+          warnings.add(label);
+        }
+      });
+      
+      if (problems.isEmpty && warnings.isEmpty) {
+        return 'Hasil inspeksi fisik: Semua komponen dalam kondisi OK.';
+      }
+      
+      final summary = <String>[];
+      if (problems.isNotEmpty) {
+        summary.add('Masalah Kritis: ${problems.join(", ")}');
+      }
+      if (warnings.isNotEmpty) {
+        summary.add('Peringatan: ${warnings.join(", ")}');
+      }
+      return 'Hasil inspeksi fisik: ${summary.join(" | ")}';
+    } catch (_) {
+      return 'Gagal membaca data inspeksi fisik.';
+    }
+  }
+
+  static Future<String> _getServiceLogsSummary(String vehicleUuid) async {
+    try {
+      final logs = await AppDatabase.getServiceLogs(vehicleUuid);
+      if (logs.isEmpty) return 'Belum ada catatan servis terdaftar.';
+      
+      final List<String> summaries = [];
+      for (final log in logs.take(4)) {
+        final type = log['service_type'] ?? 'Servis';
+        final date = log['service_date'] ?? '-';
+        final odo = log['current_mileage'] ?? 0;
+        final oil = log['oil_brand'] ?? '';
+        final notes = log['notes'] ?? '';
+        summaries.add('- $type pada $date ($odo km)${oil.isNotEmpty ? " · Oli/Part: $oil" : ""}${notes.isNotEmpty ? " · Catatan: $notes" : ""}');
+      }
+      return summaries.join('\n');
+    } catch (_) {
+      return 'Gagal membaca catatan servis.';
+    }
+  }
+
   static Future<String> getJazzyResponse({
     required String query,
     required double coolantTemp,
@@ -174,10 +258,7 @@ Prediksikan jadwal servis berikutnya.''';
   }) async {
     final activeKey = await getEffectiveApiKey();
     final key = activeKey.isNotEmpty ? activeKey : _apiKey;
-    if (key.isEmpty) {
-      return _localJazzyFallback(query, coolantTemp, batteryVoltage, rpm, dtcCodes);
-    }
-
+    
     // Load active vehicle specifications dynamically
     final vehicleUuid = ObdBluetoothService.instance.activeVehicleUuid;
     final vehicle = await AppDatabase.getVehicle(vehicleUuid);
@@ -185,22 +266,44 @@ Prediksikan jadwal servis berikutnya.''';
         ? '${vehicle['brand']} ${vehicle['model']} (${vehicle['year']}, ${vehicle['engine_type']}, ${vehicle['fuel_type']}, ${vehicle['transmission_type']})'
         : 'Honda Jazz GE8 2012';
 
+    final obd = ObdBluetoothService.instance;
+    final inspectionSummary = await _getInspectionSummary(vehicleUuid);
+    final serviceLogsSummary = await _getServiceLogsSummary(vehicleUuid);
+
+    if (key.isEmpty) {
+      return _localJazzyFallback(query, coolantTemp, batteryVoltage, rpm, dtcCodes);
+    }
+
     final systemPrompt = '''
-Kamu adalah Jazzy, sahabat mekanik profesional AI yang hangat, ramah, bersahabat, dan penuh perhatian.
+Kamu adalah Jazzy, sahabat asisten AI sekaligus mekanik profesional berpengetahuan tinggi, hangat, ramah, dan solutif.
 Panggil pengguna dengan "Bos", "Bro", atau "Om".
-Jawab singkat, padat, solutif (maks 2-3 kalimat pendek).
+Jawab singkat, padat, dan solutif (maksimal 3 kalimat pendek).
 
-Kendaraan Aktif Pengguna: $specs.
-Sesuaikan analisis kerusakan OBD-II, kode DTC, suhu, dan rekomendasi secara spesifik berdasarkan tipe kendaraan tersebut!
+Spesifikasi Mobil Pengguna:
+- Tipe: $specs
+- Odometer Saat Ini: ${obd.currentOdometer} km
 
-Prioritas diagnosa:
-1. Riwayat servis terakhir (tanggal, KM, komponen, merek, umur pakai).
-2. KM tempuh sejak penggantian.
-3. Waktu berlalu sejak penggantian.
-4. Data OBD-II: RPM $rpm · Coolant ${coolantTemp.toStringAsFixed(1)}°C · Aki ${batteryVoltage.toStringAsFixed(2)}V · Speed $speed km/h · DTC: ${dtcCodes.isEmpty ? "Tidak ada" : dtcCodes}.
-5. Inspeksi fisik pengguna.
-6. Pola penggunaan kendaraan.
-7. Standar pabrikan.''';
+Data Riwayat Servis (Input Manual):
+$serviceLogsSummary
+
+Data Hasil Inspeksi Fisik:
+$inspectionSummary
+
+Data Sensor OBD-II Real-Time & Trip:
+- RPM: ${obd.rpm.toStringAsFixed(0)} rpm
+- Kecepatan: ${obd.speed.toStringAsFixed(0)} km/h
+- Suhu Coolant Radiator: ${obd.coolantTemp.toStringAsFixed(1)}°C
+- Tegangan Aki: ${obd.batteryVoltage.toStringAsFixed(2)}V
+- Fuel Trim: ${obd.fuelTrim.toStringAsFixed(2)}%
+- Kode DTC Error: ${obd.dtcCodes.isEmpty ? "Tidak ada (Semua Sistem OK)" : obd.dtcCodes}
+- Jarak Perjalanan Saat Ini (Trip): ${obd.tripDistance.toStringAsFixed(1)} km
+- Rata-rata Jarak Perjalanan Harian/Trip: ${obd.tripDistance.toStringAsFixed(1)} km
+- BBM Terpakai Selama Perjalanan: ${obd.tripFuelUsed.toStringAsFixed(2)} Liter
+- Rata-rata Konsumsi BBM: ${obd.avgFuelEconomy.toStringAsFixed(1)} km/L
+- Konsumsi BBM Real-Time: ${obd.instantFuelEconomy.toStringAsFixed(1)} km/L
+
+Misi Anda:
+Gunakan SEMUA data di atas (spesifikasi mobil, riwayat servis, inspeksi fisik, dan parameter OBD-II/BBM/Trip real-time) untuk mendiagnosis keluhan pengguna dan memberikan saran pemeliharaan mobil yang akurat layaknya montir profesional sungguhan.''';
 
     try {
       final resp = await _dio.post(
