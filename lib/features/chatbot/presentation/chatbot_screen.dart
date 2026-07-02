@@ -146,6 +146,27 @@ Jangan berikan penjelasan tentang format CMD ini ke pengguna, cukup eksekusi sec
 
     try {
       final activeKey = await getEffectiveApiKey();
+      
+      // Dynamically load active vehicle specs, inspection summary, and service logs summary
+      final vehicleUuid = ObdBluetoothService.instance.activeVehicleUuid;
+      final vehicle = await AppDatabase.getVehicle(vehicleUuid);
+      final specs = vehicle != null
+          ? '${vehicle['brand']} ${vehicle['model']} (${vehicle['year']}, ${vehicle['engine_type']}, ${vehicle['fuel_type']}, ${vehicle['transmission_type']})'
+          : 'Honda Jazz GE8 2012';
+
+      final dynamicSystemPrompt = await AiPredictionService.getUnifiedSystemPrompt(
+        specs: specs,
+        inspectionSummary: await AiPredictionService.getInspectionSummary(vehicleUuid),
+        serviceLogsSummary: await AiPredictionService.getServiceLogsSummary(vehicleUuid),
+        obd: ObdBluetoothService.instance,
+        isChatbot: true,
+      );
+
+      // Refresh the system prompt in history
+      if (_chatHistory.isNotEmpty && _chatHistory[0]['role'] == 'system') {
+        _chatHistory[0]['content'] = dynamicSystemPrompt;
+      }
+
       final response = await _dio.post(
         '/chat/completions',
         options: Options(headers: {

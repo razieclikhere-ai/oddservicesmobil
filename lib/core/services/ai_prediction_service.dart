@@ -165,7 +165,7 @@ Prediksikan jadwal servis berikutnya.''';
   // ══════════════════════════════════════════════════════════════════════════
   // Jazzy Chat Response
   // ══════════════════════════════════════════════════════════════════════════
-  static Future<String> _getInspectionSummary(String vehicleUuid) async {
+  static Future<String> getInspectionSummary(String vehicleUuid) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final savedJson = prefs.getString('inspection_$vehicleUuid');
@@ -228,7 +228,7 @@ Prediksikan jadwal servis berikutnya.''';
     }
   }
 
-  static Future<String> _getServiceLogsSummary(String vehicleUuid) async {
+  static Future<String> getServiceLogsSummary(String vehicleUuid) async {
     try {
       final logs = await AppDatabase.getServiceLogs(vehicleUuid);
       if (logs.isEmpty) return 'Belum ada catatan servis terdaftar.';
@@ -248,36 +248,75 @@ Prediksikan jadwal servis berikutnya.''';
     }
   }
 
-  static Future<String> getJazzyResponse({
-    required String query,
-    required double coolantTemp,
-    required double batteryVoltage,
-    required double rpm,
-    required double speed,
-    required String dtcCodes,
+  static String get _workshopsDatabase => '''
+Database Rekomendasi Bengkel & Tempat Servis Terpercaya (Indonesia):
+1. Bengkel Resmi Pabrikan:
+   - Toyota: Auto2000 (Terbaik untuk servis berkala Toyota, suku cadang 100% orisinil).
+   - Honda: Bengkel Resmi Honda (Spesialis servis berkala, recall/ganti airbag, transmisi CVT/AT Honda).
+   - Suzuki/Daihatsu: Bengkel Resmi terkait.
+2. Bengkel Umum Berkualitas:
+   - Shop&Drive: Sangat direkomendasikan untuk ganti Aki (Astra Otoparts, garansi panjang), Oli Mesin, dan Shockbreaker.
+   - CARfix: Bengkel umum modern untuk servis berkala, rem, kelistrikan, tune-up, dan scanning OBD-II multi-brand.
+   - Nawilis: Spesialis spooring, balancing, kaki-kaki, ban, dan suspensi mobil.
+   - Bosch Car Service: Teknologi diagnostik tinggi untuk kendala kelistrikan dan ECU mobil Eropa/Jepang.
+3. Spesialis Sistem Tertentu:
+   - AC Mobil: Rotary Bintaro atau Denso AC Service (Spesialis kompresor AC, evaporator, isi freon).
+   - Radiator & Cooling System: Bengkel spesialis radiator lokal terdekat (penting untuk masalah overheat/coolant temp tinggi).
+   - Knalpot: Bengkel knalpot spesialis (seperti HKS, RSpeed) jika terjadi kebocoran pipa knalpot.''';
+
+  static String get _sparePartsDatabase => '''
+Database Kisaran Harga & Merek Sparepart (Marketplace Online & Offline):
+1. Oli Mesin:
+   - Fully Synthetic (10W-40 / 5W-30 / 0W-20): Shell Helix HX8/Ultra (Rp 350rb - 600rb/4L), Pertamina Fastron Gold/Techno (Rp 280rb - 450rb/4L), Mobil 1 (Rp 600rb - 900rb/4L).
+   - Filter Oli: Original Astra/Honda/Toyota (Rp 40rb - 90rb), Sakura Filter (aftermarket berkualitas, Rp 30rb - 50rb).
+2. Sistem Pengereman:
+   - Kampas Rem Depan: Akebono (Rp 250rb - 400rb), Bendix Metal King (cengkraman pakem, Rp 300rb - 500rb), Original Pabrikan (Rp 450rb - 750rb).
+   - Minyak Rem: Prestone DOT 3/DOT 4 (Rp 30rb - 60rb/botol).
+3. Sistem Pengapian & Kelistrikan:
+   - Busi: NGK Standard (Rp 25rb - 40rb/pc), NGK Iridium IX (performa tinggi, Rp 120rb - 180rb/pc), Denso Iridium (Rp 100rb - 150rb/pc).
+   - Aki (Battery): GS Astra (Tipe basah Rp 700rb - 900rb, Tipe MF/Kering Rp 950rb - 1.4jt), Amaron (Daya tahan tinggi, Rp 1.1jt - 1.6jt).
+4. Filter Udara & AC:
+   - Filter Udara Mesin: Sakura Filter (Rp 60rb - 100rb), Original Pabrikan (Rp 120rb - 200rb).
+   - Filter Kabin/AC: Sakura Carbon (menyerap bau, Rp 50rb - 80rb).
+Tips Pembelian: Sarankan pengguna mencari di Tokopedia/Shopee Mall (Official Store merek terkait seperti Astra Otoparts Official, Shell Official, Honda/Toyota Genuine Parts Store) untuk menghindari barang tiruan.''';
+
+  static Future<String> getUnifiedSystemPrompt({
+    required String specs,
+    required String inspectionSummary,
+    required String serviceLogsSummary,
+    required ObdBluetoothService obd,
+    bool isChatbot = false,
   }) async {
-    final activeKey = await getEffectiveApiKey();
-    final key = activeKey.isNotEmpty ? activeKey : _apiKey;
-    
-    // Load active vehicle specifications dynamically
-    final vehicleUuid = ObdBluetoothService.instance.activeVehicleUuid;
-    final vehicle = await AppDatabase.getVehicle(vehicleUuid);
-    final specs = vehicle != null
-        ? '${vehicle['brand']} ${vehicle['model']} (${vehicle['year']}, ${vehicle['engine_type']}, ${vehicle['fuel_type']}, ${vehicle['transmission_type']})'
-        : 'Honda Jazz GE8 2012';
+    final sPromptHeader = isChatbot
+        ? '''
+Kamu adalah Jazzy, asisten mekanik AI sekaligus konsultan profesional tingkat dunia yang sangat sopan, santun, hangat, dan melayani dengan tulus.
+Selalu sapa pengguna dengan sebutan terhormat seperti "Bapak", "Ibu", atau "Kakak". Jangan gunakan kata sapaan gaul/slang seperti "Bro" atau "Om".
+Gunakan tutur bahasa Indonesia yang halus, sopan, sabar, dan menenangkan.
+Berikan penjelasan teknis secara sederhana, solutif, penuh empatik, dan mudah dimengerti.
 
-    final obd = ObdBluetoothService.instance;
-    final inspectionSummary = await _getInspectionSummary(vehicleUuid);
-    final serviceLogsSummary = await _getServiceLogsSummary(vehicleUuid);
+Jika pengguna meminta untuk melakukan tindakan/aksi tertentu di aplikasi, kamu HARUS menyisipkan kode perintah di akhir jawabanmu dengan format:
+[CMD: {"action": "ACTION_NAME", ...}]
 
-    if (key.isEmpty) {
-      return _localJazzyFallback(query, coolantTemp, batteryVoltage, rpm, dtcCodes);
-    }
+Tindakan yang didukung:
+1. set_active_vehicle: Mengganti kendaraan aktif.
+   Format: [CMD: {"action": "set_active_vehicle", "vehicle_name": "Nama Mobil"}]
+2. clear_scan_history: Menghapus semua riwayat scan OBD.
+   Format: [CMD: {"action": "clear_scan_history"}]
+3. add_service_log: Mencatat servis baru.
+   Format: [CMD: {"action": "add_service_log", "service_type": "Ganti Oli Mesin", "oil_brand": "Shell", "current_mileage": 150000, "next_target_mileage": 160000, "cost": 350000}]
+4. add_schedule: Menambahkan jadwal servis/maintenance baru.
+   Format: [CMD: {"action": "add_schedule", "service_name": "Ganti Ban", "interval_mileage": 20000, "interval_months": 12, "description": "Deskripsi singkat"}]
+5. delete_schedule: Menghapus jadwal servis.
+   Format: [CMD: {"action": "delete_schedule", "service_name": "Nama Servis"}]
 
-    final systemPrompt = '''
+Jangan berikan penjelasan tentang format CMD ini ke pengguna, cukup eksekusi secara transparan.'''
+        : '''
 Kamu adalah Jazzy, sahabat asisten AI sekaligus mekanik profesional berpengetahuan tinggi, hangat, ramah, dan solutif.
-Panggil pengguna dengan "Bos", "Bro", atau "Om".
-Jawab singkat, padat, dan solutif (maksimal 3 kalimat pendek).
+Panggil pengguna dengan sapaan hangat seperti "Bos", "Bro", atau "Om".
+Jawab singkat, padat, dan solutif (maksimal 3 kalimat pendek).''';
+
+    return '''
+$sPromptHeader
 
 Spesifikasi Mobil Pengguna:
 - Tipe: $specs
@@ -302,8 +341,47 @@ Data Sensor OBD-II Real-Time & Trip:
 - Rata-rata Konsumsi BBM: ${obd.avgFuelEconomy.toStringAsFixed(1)} km/L
 - Konsumsi BBM Real-Time: ${obd.instantFuelEconomy.toStringAsFixed(1)} km/L
 
+$_workshopsDatabase
+
+$_sparePartsDatabase
+
 Misi Anda:
-Gunakan SEMUA data di atas (spesifikasi mobil, riwayat servis, inspeksi fisik, dan parameter OBD-II/BBM/Trip real-time) untuk mendiagnosis keluhan pengguna dan memberikan saran pemeliharaan mobil yang akurat layaknya montir profesional sungguhan.''';
+Gunakan SEMUA data di atas (spesifikasi mobil, riwayat servis, inspeksi fisik, parameter OBD-II/BBM/Trip real-time, rekomendasi bengkel/tempat servis, dan kisaran harga sparepart) untuk mendiagnosis keluhan pengguna, memberikan saran tempat servis terpercaya (seperti Auto2000, Shop&Drive, CARfix, dll.), serta referensi harga/merek sparepart orisinal atau berkualitas tinggi. Bersikaplah interaktif dan cerdas layaknya Gemini AI.''';
+  }
+
+  static Future<String> getJazzyResponse({
+    required String query,
+    required double coolantTemp,
+    required double batteryVoltage,
+    required double rpm,
+    required double speed,
+    required String dtcCodes,
+  }) async {
+    final activeKey = await getEffectiveApiKey();
+    final key = activeKey.isNotEmpty ? activeKey : _apiKey;
+    
+    // Load active vehicle specifications dynamically
+    final vehicleUuid = ObdBluetoothService.instance.activeVehicleUuid;
+    final vehicle = await AppDatabase.getVehicle(vehicleUuid);
+    final specs = vehicle != null
+        ? '${vehicle['brand']} ${vehicle['model']} (${vehicle['year']}, ${vehicle['engine_type']}, ${vehicle['fuel_type']}, ${vehicle['transmission_type']})'
+        : 'Honda Jazz GE8 2012';
+
+    final obd = ObdBluetoothService.instance;
+    final inspectionSummary = await getInspectionSummary(vehicleUuid);
+    final serviceLogsSummary = await getServiceLogsSummary(vehicleUuid);
+
+    if (key.isEmpty) {
+      return _localJazzyFallback(query, coolantTemp, batteryVoltage, rpm, dtcCodes);
+    }
+
+    final systemPrompt = await getUnifiedSystemPrompt(
+      specs: specs,
+      inspectionSummary: inspectionSummary,
+      serviceLogsSummary: serviceLogsSummary,
+      obd: obd,
+      isChatbot: false,
+    );
 
     try {
       final resp = await _dio.post(
